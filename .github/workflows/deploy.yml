@@ -1,0 +1,78 @@
+# 달빛 포션 상점 — GitHub Pages 배포 (공식 GitHub Pages Actions 방식)
+# main 브랜치에 push하거나 Actions 탭에서 직접 실행(workflow_dispatch)하면 빌드 후 배포합니다.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        # package-lock.json이 있으면 npm ci(잠긴 버전 그대로), 없으면 npm install
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            echo "package-lock.json이 없어 npm install로 설치합니다."
+            npm install
+          fi
+
+      - name: Run tests
+        run: npm test
+
+      - name: Set base path from repository name
+        # 저장소 이름으로 하위 경로를 정합니다. 예) 저장소 my-game → /my-game/
+        # <사용자>.github.io 저장소(사용자 사이트)는 루트(/)에서 열리므로 / 를 사용합니다.
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          if [[ "$REPO_NAME" == *.github.io ]]; then
+            BASE_PATH="/"
+          else
+            BASE_PATH="/${REPO_NAME}/"
+          fi
+          echo "VITE_BASE_PATH=${BASE_PATH}" >> "$GITHUB_ENV"
+          echo "Vite base 경로: ${BASE_PATH}"
+
+      - name: Build
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
