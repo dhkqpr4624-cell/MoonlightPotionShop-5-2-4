@@ -7,6 +7,7 @@ import { classifyProduct, LEARNING_TYPES, type LearningTypeId } from "../data/le
 import { getRecipe, RECIPES, type Recipe } from "../data/recipes.ts";
 import { isNaturalNumber, multiplyStrings } from "../lib/decimal.ts";
 import { randomInt, type Rng } from "../lib/rng.ts";
+import { drawFromDeck, type DeckState } from "../lib/deck.ts";
 import type { IngredientTask, Order } from "./types.ts";
 
 export interface OrderSettings {
@@ -121,3 +122,30 @@ export const PHASE1_SETTINGS: OrderSettings = {
   recipeIds: Object.keys(RECIPES),
   customerIds: ["fox"],
 };
+
+/**
+ * 하루치 주문(손님 5명)을 한꺼번에 만든다.
+ * 덱에서 차례로 뽑으므로 같은 병 수가 연속으로 나오지 않는다(전날 마지막 손님과 다음 날 첫 손님 사이 포함).
+ * 첫 손님만 창구에 온 상태(arrived), 나머지는 대기(queued).
+ */
+export function createDayOrders(
+  deck: DeckState,
+  nextOrderNumber: number,
+  count: number,
+  rng: Rng,
+  settings: OrderSettings = PHASE1_SETTINGS,
+): { orders: Order[]; deck: DeckState; nextOrderNumber: number } {
+  const keys = multiBottleKeys(settings);
+  const orders: Order[] = [];
+  let d = deck;
+  let n = nextOrderNumber;
+  for (let i = 0; i < count; i++) {
+    const drawn = drawFromDeck(d, keys, rng);
+    d = drawn.deck;
+    const customerId = settings.customerIds[randomInt(rng, settings.customerIds.length)];
+    const order = createOrderFromKey(drawn.key, n, customerId, rng);
+    orders.push({ ...order, status: i === 0 ? "arrived" : "queued" });
+    n++;
+  }
+  return { orders, deck: d, nextOrderNumber: n };
+}

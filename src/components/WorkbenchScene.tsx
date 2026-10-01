@@ -13,8 +13,7 @@ import { Cauldron, IngredientIcon, MeasureTool, PotionBottle } from "./art/Potio
 export const POUR_MS = 1400;
 export const BOTTLE_MS = 1800;
 
-export function WorkbenchScene({ state, dispatch }: { state: GameState; dispatch: Dispatch<Action> }) {
-  const order = state.order as Order;
+export function WorkbenchScene({ state, order, dispatch }: { state: GameState; order: Order; dispatch: Dispatch<Action> }) {
   const recipe = getRecipe(order.recipeId);
   const customer = getCustomer(order.customerId);
   const task: IngredientTask | undefined = order.tasks[state.selectedTask];

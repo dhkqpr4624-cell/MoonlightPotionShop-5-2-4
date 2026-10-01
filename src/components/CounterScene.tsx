@@ -3,12 +3,14 @@ import { getCustomer, type Customer } from "../data/customers.ts";
 import { getRecipe } from "../data/recipes.ts";
 import { getIngredient } from "../data/ingredients.ts";
 import { assetUrl } from "../lib/assets.ts";
-import { newSeed } from "../lib/rng.ts";
-import type { Action } from "../game/reducer.ts";
-import type { GameState, Order } from "../game/types.ts";
+import { isLastCustomer, type Action } from "../game/reducer.ts";
+import type { DayState, Order } from "../game/types.ts";
 import { FoxArt, type Mood } from "./art/FoxArt.tsx";
 import { PotionBottle } from "./art/PotionArt.tsx";
 import { NightBackdrop } from "./art/NightBackdrop.tsx";
+import { Shutters } from "./art/Shutters.tsx";
+
+export const OPEN_ANIM_MS = 1500;
 
 function CustomerSprite({ customer, mood }: { customer: Customer; mood: Mood }) {
   const [broken, setBroken] = useState(false);
@@ -18,8 +20,22 @@ function CustomerSprite({ customer, mood }: { customer: Customer; mood: Mood }) 
   return <FoxArt mood={mood} />;
 }
 
-export function CounterScene({ state, dispatch }: { state: GameState; dispatch: Dispatch<Action> }) {
-  const order = state.order as Order;
+export function CounterScene({
+  day,
+  order,
+  dispatch,
+  opening,
+  onOpenEnd,
+  onCloseDay,
+}: {
+  day: DayState;
+  order: Order;
+  dispatch: Dispatch<Action>;
+  /** 다음 날(또는 첫날) 시작 직후: 덧문이 열리고 첫 손님이 등장하는 연출 */
+  opening: boolean;
+  onOpenEnd: () => void;
+  onCloseDay: () => void;
+}) {
   const customer = getCustomer(order.customerId);
   const recipe = getRecipe(order.recipeId);
 
@@ -36,8 +52,31 @@ export function CounterScene({ state, dispatch }: { state: GameState; dispatch: 
   const deliver = () => {
     if (order.status !== "bottled") return;
     setCelebrating(true);
-    dispatch({ type: "DELIVER" });
+    dispatch({ type: "DELIVER", orderId: order.id });
   };
+
+  useEffect(() => {
+    if (!opening) return;
+    const t = window.setTimeout(onOpenEnd, OPEN_ANIM_MS);
+    return () => window.clearTimeout(t);
+  }, [opening, onOpenEnd]);
+
+  // 다음 손님 등장 연출. 클릭과 같은 렌더에서 잠그므로, '다음 손님'을 두 번 눌러도
+  // 같은 자리에 나타나는 '주문 받기'가 눌리지 않는다.
+  const [arriving, setArriving] = useState(false);
+  useEffect(() => {
+    if (!arriving) return;
+    const t = window.setTimeout(() => setArriving(false), 800);
+    return () => window.clearTimeout(t);
+  }, [arriving]);
+  const callNext = () => {
+    if (order.status !== "paid") return;
+    setArriving(true);
+    dispatch({ type: "NEXT_CUSTOMER", fromOrderId: order.id });
+  };
+
+  const last = isLastCustomer(day);
+  const locked = opening || celebrating || arriving;
 
   const mood: Mood = order.status === "paid" ? "happy" : order.status === "bottled" ? "curious" : "neutral";
   const speech =
@@ -50,8 +89,9 @@ export function CounterScene({ state, dispatch }: { state: GameState; dispatch: 
           : [order.lines.thanks];
 
   return (
-    <div className="counter">
+    <div className={`counter ${opening ? "is-opening" : ""} ${arriving ? "is-arriving" : ""}`}>
       <NightBackdrop />
+      <Shutters mode={opening ? "opening" : "open"} />
       <div className="counter-stage">
         <div className="customer" data-testid="customer">
           <CustomerSprite customer={customer} mood={mood} />
@@ -78,7 +118,9 @@ export function CounterScene({ state, dispatch }: { state: GameState; dispatch: 
         )}
 
         <div className="order-ticket" aria-label="주문서">
-          <div className="ticket-title">주문서 #{order.id.replace("order-", "")}</div>
+          <div className="ticket-title">
+            손님 {day.currentIndex + 1} / {day.orders.length} · 주문서 #{order.id.replace("order-", "")}
+          </div>
           <div className="ticket-line">
             <PotionBottle look={recipe.look} size={26} />
             <span>
@@ -95,7 +137,7 @@ export function CounterScene({ state, dispatch }: { state: GameState; dispatch: 
 
         <div className="counter-actions">
           {order.status === "arrived" && (
-            <button type="button" className="btn btn-primary btn-big" onClick={() => dispatch({ type: "ACCEPT_ORDER" })} data-testid="accept">
+            <button type="button" className="btn btn-primary btn-big" onClick={() => dispatch({ type: "ACCEPT_ORDER" })} disabled={locked} data-testid="accept">
               주문 받기 → 제조대로
             </button>
           )}
@@ -105,7 +147,7 @@ export function CounterScene({ state, dispatch }: { state: GameState; dispatch: 
             </button>
           )}
           {order.status === "bottled" && (
-            <button type="button" className="btn btn-gold btn-big" onClick={deliver} data-testid="deliver">
+            <button type="button" className="btn btn-gold btn-big" onClick={deliver} disabled={locked} data-testid="deliver">
               🧪 포션 전달하기
             </button>
           )}
@@ -113,17 +155,24 @@ export function CounterScene({ state, dispatch }: { state: GameState; dispatch: 
             <>
               <p className="paid-text" data-testid="paid-text">
                 판매 완료! 달빛 동전 {order.price}개를 받았어요.
+                {last && " 오늘의 마지막 손님이었어요."}
               </p>
-              {/* 전달 버튼을 두 번 눌러도 인사 장면을 건너뛰지 않도록, 동전 연출 동안은 잠시 비활성 */}
-              <button
-                type="button"
-                className="btn btn-primary btn-big"
-                disabled={celebrating}
-                onClick={() => dispatch({ type: "NEXT_CUSTOMER", seed: newSeed() })}
-                data-testid="next"
-              >
-                다음 손님 맞이하기
-              </button>
+              {/* 전달 버튼을 두 번 눌러도 감사 장면을 건너뛰지 않도록, 동전 연출 동안은 잠시 비활성 */}
+              {last ? (
+                <button type="button" className="btn btn-gold btn-big" disabled={locked} onClick={onCloseDay} data-testid="close-day">
+                  🌙 영업 마감
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-big"
+                  disabled={locked}
+                  onClick={callNext}
+                  data-testid="next"
+                >
+                  다음 손님 맞이하기
+                </button>
+              )}
             </>
           )}
         </div>

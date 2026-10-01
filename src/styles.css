@@ -49,6 +49,10 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 }
 .top-bar .btn-ghost { color: var(--lamp-soft); border-color: rgba(255, 231, 176, 0.4); }
 .shop-name { font-weight: 800; letter-spacing: 0.05em; }
+.day-badge {
+  font-weight: 800; letter-spacing: 0.02em; padding: 6px 14px; border-radius: 999px;
+  background: rgba(255, 231, 176, 0.12); border: 2px solid rgba(255, 231, 176, 0.35); text-align: center;
+}
 .money {
   display: flex; align-items: center; gap: 6px; padding: 6px 14px;
   border-radius: 999px; background: #2e2760; border: 2px solid var(--lamp);
@@ -94,7 +98,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 @keyframes lamp { 50% { opacity: 0.7; } }
 
 .counter-stage {
-  position: relative; flex: 1; display: flex; align-items: flex-end; justify-content: center;
+  position: relative; z-index: 1; flex: 1; display: flex; align-items: flex-end; justify-content: center;
   gap: 16px; padding: 24px 16px 0; min-height: 300px;
 }
 .customer { width: min(260px, 38vw); margin-bottom: -6px; }
@@ -115,7 +119,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .speech-main { font-size: 1.25rem; font-weight: 800; }
 
 .counter-top {
-  position: relative; z-index: 1; background: linear-gradient(#8a5a3c, #6b4430);
+  position: relative; z-index: 3; background: linear-gradient(#8a5a3c, #6b4430);
   border-top: 6px solid #3d2518; padding: 14px 16px 18px;
   display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px;
 }
@@ -132,7 +136,7 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
 .counter-actions { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .paid-text { margin: 0; color: #fff; font-weight: 700; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4); }
 .coin-pop {
-  position: absolute; right: 12%; top: 28%; z-index: 3; font-size: 2.2rem; font-weight: 900; color: var(--lamp);
+  position: absolute; right: 12%; top: 28%; z-index: 4; font-size: 2.2rem; font-weight: 900; color: var(--lamp);
   text-shadow: 0 3px 0 var(--ink); animation: coin 1.6s ease-out forwards; pointer-events: none;
 }
 @keyframes coin { from { transform: translateY(20px); opacity: 0; } 20% { opacity: 1; } to { transform: translateY(-60px); opacity: 0; } }
@@ -311,9 +315,125 @@ button { font: inherit; color: inherit; touch-action: manipulation; }
   .counter-stage { flex-direction: column; align-items: center; }
   .speech::before { display: none; }
   .progress { margin-left: 0; }
-  .shop-name { display: none; }
+  .day-badge { font-size: 0.85rem; padding: 4px 10px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+/* ================= Phase 2 ================= */
+.top-bar .btn-ghost:disabled { opacity: 0.4; }
+
+/* 버튼 추가 스타일 */
+.btn-light { background: #fff; }
+.btn-ghost-dark { background: var(--paper); }
+
+/* ---------- 덧문 ---------- */
+.shutters { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.shutter-l, .shutter-r { transform: translateX(0); }
+.shutters--opening .shutter-l { animation: shutter-open-l 0.9s ease-in-out 0.15s forwards; }
+.shutters--opening .shutter-r { animation: shutter-open-r 0.9s ease-in-out 0.15s forwards; }
+.shutters--closing .shutter-l { transform: translateX(-360px); animation: shutter-close-l 0.9s ease-in-out 0.45s forwards; }
+.shutters--closing .shutter-r { transform: translateX(360px); animation: shutter-close-r 0.9s ease-in-out 0.45s forwards; }
+@keyframes shutter-open-l { to { transform: translateX(-360px); } }
+@keyframes shutter-open-r { to { transform: translateX(360px); } }
+@keyframes shutter-close-l { from { transform: translateX(-360px); } to { transform: translateX(0); } }
+@keyframes shutter-close-r { from { transform: translateX(360px); } to { transform: translateX(0); } }
+
+/* 덧문이 열린 뒤 첫 손님 등장 */
+.counter.is-opening .customer, .counter.is-opening .speech { animation: customer-enter 0.6s ease-out 0.85s both; }
+.counter.is-arriving .customer, .counter.is-arriving .speech { animation: customer-enter 0.5s ease-out both; }
+@keyframes customer-enter { from { opacity: 0; transform: translateY(30px); } }
+
+/* ---------- 마감 화면 ---------- */
+.closing {
+  position: relative; flex: 1; overflow: hidden; min-height: 560px;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: 18px 16px 16px; gap: 14px;
+}
+.closing-leaving-customer {
+  position: absolute; z-index: 1; left: 50%; bottom: 0; width: min(260px, 38vw); transform: translateX(-60%);
+  animation: customer-leave 0.6s ease-in forwards;
+}
+.closing-leaving-customer svg { width: 100%; height: auto; display: block; }
+@keyframes customer-leave { to { opacity: 0; transform: translateX(10%); } }
+.closing-dim {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 20%, rgba(255, 207, 107, 0.14), rgba(10, 8, 32, 0.35) 70%);
+}
+.closed-sign {
+  position: relative; z-index: 3; transform: rotate(-3deg); flex: none;
+  display: flex; flex-direction: column; align-items: center; pointer-events: none;
+}
+.closed-sign.is-dropping { animation: sign-drop 0.5s cubic-bezier(0.3, 1.5, 0.6, 1) 1.2s both; }
+@keyframes sign-drop { from { opacity: 0; transform: translateY(-60px) rotate(-3deg); } }
+.closed-sign img { max-width: 260px; }
+.closed-sign-strings { width: 120px; height: 34px; border: 3px solid var(--ink); border-bottom: none; border-radius: 60px 60px 0 0; }
+.closed-sign-board {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: linear-gradient(#f3d9a4, #e3bf7c); border: 4px solid var(--ink); border-radius: 12px;
+  padding: 10px 26px; box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 0 40px rgba(255, 207, 107, 0.35);
+}
+.closed-sign-main { font-size: clamp(1.4rem, 3.6vw, 2rem); font-weight: 900; color: #7a2e2e; letter-spacing: 0.08em; }
+.closed-sign-sub { font-size: 0.85rem; font-weight: 700; color: var(--ink-soft); }
+
+.result-card {
+  position: relative; z-index: 4; width: min(760px, 100%); min-height: 0; overflow: auto;
+  background: rgba(255, 248, 234, 0.97); border: 4px solid var(--ink); border-radius: 20px; padding: 12px 16px;
+  box-shadow: 0 8px 0 rgba(0, 0, 0, 0.35); animation: card-in 0.4s ease-out both;
+}
+@keyframes card-in { from { opacity: 0; transform: translateY(20px); } }
+.result-title { margin: 0 0 8px; text-align: center; font-size: 1.3rem; }
+.result-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; }
+.result-tile { background: #fff; border: 2px solid #d8c9a8; border-radius: 12px; padding: 6px 10px; }
+.result-tile dt { font-size: 0.8rem; color: var(--ink-soft); font-weight: 700; }
+.result-tile dd { margin: 0; font-size: 1.2rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.tile-earned, .tile-money { background: #fff6dc; border-color: #e2c55b; }
+.tile-first, .tile-corrected, .tile-hint { background: #eef8f3; border-color: #9fd6b8; }
+.result-cheer { margin-top: 10px; background: #f3efff; border-radius: 12px; padding: 8px 12px; line-height: 1.55; }
+.result-cheer p { margin: 2px 0; }
+.result-actions { display: flex; justify-content: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+
+/* ---------- 타이틀: 복구·데이터 메뉴 ---------- */
+.title-notice { margin: 0; background: rgba(63, 182, 168, 0.18); border: 2px solid var(--mint); border-radius: 12px; padding: 8px 12px; color: #fff; }
+.recovery {
+  text-align: left; background: #fff1e0; color: var(--ink); border: 3px solid var(--warn); border-radius: 14px; padding: 12px 16px; width: 100%;
+}
+.recovery ul { margin: 6px 0; padding-left: 20px; font-size: 0.9rem; }
+.recovery p { margin: 6px 0; }
+.recovery-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.recovery .btn-ghost { color: var(--ink); border-color: var(--ink); }
+.data-menu { width: 100%; text-align: left; color: var(--ink); }
+.data-menu > summary {
+  cursor: pointer; list-style: none; text-align: center; color: var(--lamp-soft); font-weight: 700; padding: 8px;
+  border: 2px dashed rgba(255, 231, 176, 0.35); border-radius: 12px; min-height: 44px;
+}
+.data-menu > summary::-webkit-details-marker { display: none; }
+.data-menu-body { margin-top: 8px; background: var(--paper); border: 3px solid var(--ink); border-radius: 14px; padding: 12px; }
+.data-menu-buttons { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.data-menu-note { font-size: 0.8rem; color: var(--ink-soft); margin: 8px 0 0; line-height: 1.5; }
+.data-menu-ok { color: var(--good); font-weight: 700; margin: 8px 0 0; }
+.data-menu-error { margin-top: 8px; background: #fff1e0; border: 2px solid var(--warn); border-radius: 10px; padding: 8px 12px; }
+.data-menu-error ul { margin: 4px 0 0; padding-left: 20px; font-size: 0.9rem; }
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 50; background: rgba(10, 8, 32, 0.7);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.modal {
+  width: min(480px, 100%); background: var(--paper); color: var(--ink); border: 4px solid var(--ink); border-radius: 18px;
+  padding: 16px 18px; box-shadow: 0 8px 0 rgba(0, 0, 0, 0.35);
+}
+.modal h3 { margin: 0 0 4px; }
+.modal p { line-height: 1.5; }
+.compare-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin: 8px 0; }
+.compare-table th { text-align: left; white-space: nowrap; padding: 6px 8px 6px 0; vertical-align: top; }
+.compare-table td { padding: 6px 0; }
+.compare-table tr + tr { border-top: 1px solid #e3d6b8; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+@media (max-width: 620px) {
+  .result-grid { grid-template-columns: repeat(2, 1fr); }
+  .result-card { max-height: none; }
+  .closing { overflow: auto; }
 }

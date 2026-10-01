@@ -40,7 +40,8 @@ export interface AutoAddition {
   note: string;
 }
 
-export type OrderStatus = "arrived" | "brewing" | "bottled" | "paid";
+/** queued: 오늘 올 예정인 손님(아직 창구에 오지 않음) */
+export type OrderStatus = "queued" | "arrived" | "brewing" | "bottled" | "paid";
 
 export interface Order {
   id: string;
@@ -76,6 +77,12 @@ export interface HintVisual {
 
 /** 해결한 문제의 학습 기록 */
 export interface AttemptRecord {
+  /** 문제 고유 ID: "<주문ID>:<재료ID>" (Phase 1 기록은 마이그레이션 때 부여) */
+  problemId: string;
+  /** 영업 일차. Phase 1(하루 개념 없음)에서 옮겨 온 기록은 0 */
+  dayNumber: number;
+  /** 그날 몇 번째 손님인지 (1~5). Phase 1 기록은 0 */
+  customerNumber: number;
   orderId: string;
   ingredientId: string;
   learningType: LearningTypeId;
@@ -97,20 +104,53 @@ export interface PourEvent {
   unit: Unit;
 }
 
-export type Scene = "title" | "counter" | "workbench";
+export type Scene = "title" | "counter" | "workbench" | "closing";
+
+/** 하루 영업. 손님 5명 = 하루. status가 덧문의 열림(open)·닫힘(closed)을 결정한다 */
+export type DayStatus = "open" | "closed";
+
+export interface DayState {
+  dayNumber: number;
+  status: DayStatus;
+  /** 오늘의 주문 5건 (영업 시작 때 모두 만들어 저장 → 새로고침해도 바뀌지 않음) */
+  orders: Order[];
+  /** 지금 응대 중인 손님 순서 (0부터) */
+  currentIndex: number;
+  /** 오늘 얻은 판매금 */
+  moneyEarned: number;
+}
+
+/** 영업 결과(마감 때 기록). 재료 하나의 계량 = 문제 하나 */
+export interface DaySummary {
+  dayNumber: number;
+  customersServed: number;
+  bottlesSold: number;
+  moneyEarned: number;
+  moneyAfter: number;
+  totalProblems: number;
+  firstTryCorrect: number;
+  correctedAfterWrong: number;
+  hintUsed: number;
+  closedAt: string;
+}
+
+export const CUSTOMERS_PER_DAY = 5;
 
 export interface GameState {
-  saveVersion: 1;
+  saveVersion: 2;
   scene: Scene;
   money: number;
   nextOrderNumber: number;
-  order: Order | null;
+  /** 영업을 한 번도 시작하지 않았으면 null */
+  day: DayState | null;
   deck: DeckState;
   selectedTask: number;
   draftAnswer: string;
   feedback: Feedback | null;
   pour: PourEvent | null;
   records: AttemptRecord[];
+  /** 지난 영업 결과 (마감한 날마다 1개) */
+  dayHistory: DaySummary[];
   stats: { ordersCompleted: number; potionsSold: number; problemsSolved: number };
   /** 이미 판매금을 받은 주문 id (중복 지급 이중 방지) */
   paidOrderIds: string[];
