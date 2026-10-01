@@ -5,6 +5,7 @@
  */
 import { LEARNING_TYPES } from "../data/learningTypes.ts";
 import { dayProblemCounts } from "./daySummary.ts";
+import { orderRows, problemRows, typeStats } from "./learningLog.ts";
 import { interpretSaveData, SAVE_VERSION } from "./save.ts";
 import type { GameState } from "./types.ts";
 
@@ -25,22 +26,29 @@ export function buildLearningExport(state: GameState, now: string) {
   const day = state.day;
   return {
     format: LEARNING_FILE_FORMAT,
-    version: 1,
+    version: 2,
     exportedAt: now,
-    note: "이름 등 개인 식별 정보는 들어 있지 않습니다. dayNumber 0은 Phase 1(하루 영업 도입 전) 기록입니다.",
+    note:
+      "이름 등 개인 식별 정보는 들어 있지 않습니다. problems는 Phase 3 문제 기록(유효한 답 1회), legacyProblems는 Phase 1·2 재시도 방식 기록입니다. legacyProblems의 dayNumber 0은 하루 영업 도입 전 기록입니다.",
+    introducedStage: day?.introStage ?? 0,
     days: state.dayHistory,
     currentDay:
       day && day.status === "open"
         ? {
             dayNumber: day.dayNumber,
             status: "영업 중",
+            rules: day.rules,
             customerNumber: day.currentIndex + 1,
             customersServed: day.orders.filter((o) => o.status === "paid").length,
             moneyEarned: day.moneyEarned,
             ...dayProblemCounts(day),
           }
         : null,
-    problems: state.records.map((r) => ({
+    typeStats: typeStats(state),
+    problems: problemRows(state),
+    review: state.review,
+    orders: orderRows(state),
+    legacyProblems: state.legacyRecords.map((r) => ({
       problemId: r.problemId,
       dayNumber: r.dayNumber,
       customerNumber: r.customerNumber,
@@ -48,14 +56,11 @@ export function buildLearningExport(state: GameState, now: string) {
       learningType: r.learningType,
       learningTypeLabel: `${LEARNING_TYPES[r.learningType].number} ${LEARNING_TYPES[r.learningType].label}`,
       expression: `${r.a} × ${r.b}`,
-      a: r.a,
-      b: r.b,
       answer: r.answer,
       firstAnswer: r.firstAnswer,
       firstCorrect: r.firstCorrect,
       attempts: r.attempts,
       hintUsed: r.hintLevel > 0,
-      hintLevel: r.hintLevel,
       solved: r.solved,
       solvedAt: r.solvedAt,
     })),

@@ -7,6 +7,7 @@ import { TitleScreen, type LoadIssue } from "./components/TitleScreen.tsx";
 import { CounterScene } from "./components/CounterScene.tsx";
 import { WorkbenchScene } from "./components/WorkbenchScene.tsx";
 import { ClosingScene } from "./components/ClosingScene.tsx";
+import { LearningRecords } from "./components/LearningRecords.tsx";
 
 type RootAction = Action | { type: "RESET" } | { type: "REPLACE_STATE"; state: GameState };
 
@@ -44,6 +45,7 @@ export default function App() {
   const [loadIssue, setLoadIssue] = useState<LoadIssue | null>(bootInfo.issue);
   const [migratedFrom, setMigratedFrom] = useState<number | null>(bootInfo.migratedFrom);
   const [shutterFx, setShutterFx] = useState<ShutterFx>(null);
+  const [showRecords, setShowRecords] = useState(false);
 
   // 상태가 바뀔 때마다 저장. 읽지 못한 저장이 있으면 사용자가 고를 때까지 저장하지 않는다.
   useEffect(() => {
@@ -107,7 +109,8 @@ export default function App() {
         </header>
       )}
       <main className="stage">
-        {!inGame && (
+        {!inGame && showRecords && <LearningRecords state={state} onBack={() => setShowRecords(false)} />}
+        {!inGame && !showRecords && (
           <TitleScreen
             state={state}
             loadIssue={loadIssue}
@@ -115,6 +118,7 @@ export default function App() {
             onStart={start}
             onReset={reset}
             onImport={applyImport}
+            onRecords={() => setShowRecords(true)}
           />
         )}
         {inGame && state.scene === "counter" && (

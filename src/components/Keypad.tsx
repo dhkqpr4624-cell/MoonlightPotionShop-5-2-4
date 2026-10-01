@@ -11,10 +11,12 @@ export function Keypad({
   onKey,
   onSubmit,
   disabled,
+  submitLabel = "계량하기",
 }: {
   onKey: (key: InputKey) => void;
   onSubmit: () => void;
   disabled: boolean;
+  submitLabel?: string;
 }) {
   return (
     <div className="keypad" aria-label="숫자 키패드">
@@ -34,7 +36,7 @@ export function Keypad({
         전체 지우기
       </button>
       <button type="button" className="key key-submit" disabled={disabled} onClick={onSubmit} data-testid="submit">
-        계량하기
+        {submitLabel}
       </button>
     </div>
   );

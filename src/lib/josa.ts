@@ -13,6 +13,8 @@ const DIGIT_HAS_FINAL: Record<string, boolean> = {
 
 const UNIT_HAS_FINAL: Record<string, boolean> = {
   mL: false, // 밀리리터
+  cm: false, // 센티미터
+  m: false, // 미터
   g: true, // 그램
 };
 
@@ -30,4 +32,9 @@ export function hasFinalConsonant(word: string): boolean {
 export function josa(word: string, pair: Pair): string {
   const [withFinal, withoutFinal] = pair.split("/");
   return word + (hasFinalConsonant(word) ? withFinal : withoutFinal);
+}
+
+/** "~예요/~이에요" : 1.2g이에요, 3m예요 */
+export function copula(word: string): string {
+  return word + (hasFinalConsonant(word) ? "이에요" : "예요");
 }

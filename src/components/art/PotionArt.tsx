@@ -26,10 +26,26 @@ function Particles({ kind, color }: { kind: PotionLook["particle"]; color: strin
   );
 }
 
-export function PotionBottle({ look, size = 60, label }: { look: PotionLook; size?: number; label?: string }) {
+/** 품질에 따라 병의 빛을 줄인다 (만족: 그대로, 조금 아쉬움: 흐리게, 불만족: 탁하게) */
+const QUALITY_FILTER: Record<string, string | undefined> = {
+  great: undefined,
+  okay: "saturate(0.6) brightness(0.95)",
+  poor: "saturate(0.15) brightness(0.85)",
+};
+
+export function PotionBottle({ look, size = 60, label, quality }: { look: PotionLook; size?: number; label?: string; quality?: string | null }) {
+  const filter = quality ? QUALITY_FILTER[quality] : undefined;
   return (
-    <svg viewBox="0 0 60 80" width={size} height={(size * 80) / 60} className="potion-bottle" role="img" aria-label={label ?? "포션 병"}>
-      <ellipse cx="30" cy="54" rx="26" ry="24" fill={look.glow} opacity="0.35" className="potion-glow" />
+    <svg
+      viewBox="0 0 60 80"
+      width={size}
+      height={(size * 80) / 60}
+      className="potion-bottle"
+      role="img"
+      aria-label={label ?? "포션 병"}
+      style={filter ? { filter } : undefined}
+    >
+      <ellipse cx="30" cy="54" rx="26" ry="24" fill={look.glow} opacity={quality === "poor" ? 0.1 : 0.35} className="potion-glow" />
       <rect x="23" y="6" width="14" height="9" rx="3" fill="#b07a4a" stroke={LINE} strokeWidth="2.5" />
       <path d="M25 15 L25 26 C 12 30, 6 40, 6 52 C 6 66, 17 76, 30 76 C 43 76, 54 66, 54 52 C 54 40, 48 30, 35 26 L35 15 Z" fill="#e8f1ff" stroke={LINE} strokeWidth="3" strokeLinejoin="round" />
       <path d="M8 50 C 8 66, 18 74, 30 74 C 42 74, 52 66, 52 50 Z" fill={look.liquid} />
@@ -62,12 +78,39 @@ export function IngredientIcon({ ingredient, size = 44 }: { ingredient: Ingredie
   );
 }
 
-/** 솥. doneColors: 이미 넣은 첨가물 색, finished: 모든 재료 투입 완료 */
-export function Cauldron({ doneColors, finished, finishColor }: { doneColors: string[]; finished: boolean; finishColor: string }) {
+/** 두 색을 t(0~1) 비율로 섞는다 */
+export function mixColor(from: string, to: string, t: number): string {
+  const f = (h: string, i: number) => parseInt(h.slice(1 + i * 2, 3 + i * 2), 16);
+  const k = Math.max(0, Math.min(1, t));
+  const c = [0, 1, 2].map((i) => Math.round(f(from, i) + (f(to, i) - f(from, i)) * k));
+  return `#${c.map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/**
+ * 솥. doneColors: 넣은 첨가물 색, stir: 젓기 진행(0~1), finishColor: 완성 색
+ * 재료량과 상관없이 액체 높이는 일정하다 (아주 큰 값을 넣어도 넘치거나 깨지지 않음)
+ */
+export function Cauldron({
+  doneColors,
+  stir,
+  finishColor,
+  showStick,
+  stickX = 0.5,
+}: {
+  doneColors: string[];
+  stir: number;
+  finishColor: string;
+  showStick: boolean;
+  /** 젓는 막대의 가로 위치 (0~1) */
+  stickX?: number;
+}) {
   const base = "#9fb4d8";
-  const surface = finished ? finishColor : doneColors[doneColors.length - 1] ?? base;
+  const mixed = doneColors.length ? doneColors.reduce((acc, c) => mixColor(acc, c, 0.5), base) : base;
+  const surface = stir > 0 ? mixColor(mixed, finishColor, stir) : mixed;
+  const sparkleCount = Math.floor(stir * 6);
+  const sx = 70 + Math.max(0, Math.min(1, stickX)) * 160;
   return (
-    <svg viewBox="0 0 300 230" className={`cauldron ${finished ? "is-finished" : ""}`} role="img" aria-label={finished ? "모든 재료가 들어간 솥" : `솥 (첨가물 ${doneColors.length}가지 투입)`}>
+    <svg viewBox="0 0 300 230" className={`cauldron ${stir >= 1 ? "is-finished" : ""}`} aria-hidden="true">
       <g className="cauldron-fire">
         <path d="M110 222 C 100 200, 120 190, 118 176 C 135 190, 140 205, 130 222 Z" fill="#ff9d3c" />
         <path d="M150 224 C 136 198, 160 186, 156 166 C 178 186, 182 206, 170 224 Z" fill="#ffc94a" />
@@ -78,14 +121,21 @@ export function Cauldron({ doneColors, finished, finishColor }: { doneColors: st
       <path d="M62 110 C 60 150, 90 184, 128 194" fill="none" stroke="#5d5178" strokeWidth="8" strokeLinecap="round" />
       <ellipse cx="150" cy="92" rx="118" ry="30" fill="#4b4066" stroke={LINE} strokeWidth="5" />
       <ellipse cx="150" cy="94" rx="100" ry="22" fill={surface} className="cauldron-liquid" />
+      {stir > 0 && (
+        <ellipse cx="150" cy="94" rx={30 + stir * 60} ry={6 + stir * 12} fill="none" stroke="#ffffff" strokeOpacity="0.45" strokeWidth="3" className="cauldron-swirl" />
+      )}
       {doneColors.map((c, i) => (
         <circle key={i} className="cauldron-bubble" style={{ animationDelay: `${i * 0.6}s` }} cx={120 + i * 50} cy={92} r={7} fill={c} stroke="#ffffff" strokeWidth="1.5" opacity="0.9" />
       ))}
-      {finished && (
-        <g className="cauldron-sparkles" fill="#fff7c2">
-          <path transform="translate(110 60)" d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z" />
-          <path transform="translate(190 52)" d="M0 -10 L2.5 -2.5 L10 0 L2.5 2.5 L0 10 L-2.5 2.5 L-10 0 L-2.5 -2.5 Z" />
-          <path transform="translate(150 40) scale(0.7)" d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z" />
+      <g className="cauldron-sparkles" fill="#fff7c2">
+        {Array.from({ length: sparkleCount }, (_, i) => (
+          <path key={i} transform={`translate(${90 + i * 24} ${66 - (i % 2) * 14}) scale(${0.6 + (i % 3) * 0.2})`} d="M0 -8 L2 -2 L8 0 L2 2 L0 8 L-2 2 L-8 0 L-2 -2 Z" />
+        ))}
+      </g>
+      {showStick && (
+        <g className="stir-stick" transform={`rotate(${(stickX - 0.5) * 30} ${sx} 96)`}>
+          <rect x={sx - 6} y={6} width={12} height={96} rx={6} fill="#b07a4a" stroke={LINE} strokeWidth="3" />
+          <ellipse cx={sx} cy={100} rx={14} ry={7} fill="#8a5a3c" stroke={LINE} strokeWidth="3" />
         </g>
       )}
     </svg>

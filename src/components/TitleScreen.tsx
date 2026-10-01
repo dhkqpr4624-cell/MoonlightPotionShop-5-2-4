@@ -27,6 +27,7 @@ export function TitleScreen({
   onStart,
   onReset,
   onImport,
+  onRecords,
 }: {
   state: GameState;
   loadIssue: LoadIssue | null;
@@ -34,8 +35,9 @@ export function TitleScreen({
   onStart: () => void;
   onReset: () => void;
   onImport: (next: GameState) => void;
+  onRecords: () => void;
 }) {
-  const hasProgress = state.day !== null || state.money > 0 || state.records.length > 0;
+  const hasProgress = state.day !== null || state.money > 0 || (state.problemLog.length + state.legacyRecords.length) > 0;
   const closed = state.day?.status === "closed";
   const status = statusText(state);
 
@@ -84,7 +86,7 @@ export function TitleScreen({
         <>
           {migratedFrom !== null && (
             <p className="title-notice" role="status" data-testid="migrated-notice">
-              이전 버전(Phase {migratedFrom})의 저장을 새 형식으로 옮겼어요. 달빛 동전과 학습 기록은 그대로예요.
+              이전 버전(Phase {migratedFrom})의 저장을 새 형식으로 옮겼어요. 달빛 동전과 학습 기록은 그대로예요. 진행 중이던 하루는 이전 규칙으로 마치고, 다음 영업부터 새 규칙이 적용돼요.
             </p>
           )}
           <button type="button" className="btn btn-primary btn-big" onClick={onStart} data-testid="start">
@@ -96,6 +98,12 @@ export function TitleScreen({
             </p>
           )}
         </>
+      )}
+
+      {!loadIssue && hasProgress && (
+        <button type="button" className="btn btn-light" onClick={onRecords} data-testid="open-records">
+          📒 학습 기록 보기
+        </button>
       )}
 
       <DataMenu state={state} canExport={!loadIssue} onImport={onImport} defaultOpen={!!loadIssue} />
@@ -111,7 +119,7 @@ export function TitleScreen({
           처음부터 다시 하기
         </button>
       )}
-      <p className="title-phase">2단계 시험판 · 하루 손님 5명 영업</p>
+      <p className="title-phase">3단계 시험판 · 직접 만드는 포션과 학습 기록</p>
     </div>
   );
 }

@@ -12,7 +12,7 @@ function describe(state: GameState | null): string {
   if (!state || !state.day) return state ? `영업 시작 전 · 달빛 동전 ${state.money}개` : "없음";
   const d = state.day;
   const where = d.status === "closed" ? "영업 마감" : `손님 ${d.currentIndex + 1} / ${d.orders.length}`;
-  return `밤 ${d.dayNumber}일차 · ${where} · 달빛 동전 ${state.money}개 · 학습 기록 ${state.records.length}개`;
+  return `밤 ${d.dayNumber}일차 · ${where} · 달빛 동전 ${state.money}개 · 학습 기록 ${state.problemLog.length + state.legacyRecords.length}개`;
 }
 
 export function DataMenu({
