@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 560" width="1000" height="560">
+  <!-- 달빛 포션 상점: 창구 쪽 실내 (직접 제작한 SVG). 창 영역 x150~850, 아치 꼭대기 y≈70. Shutters.tsx와 같은 좌표계 -->
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a2533"/>
+      <stop offset="1" stop-color="#2a1a28"/>
+    </linearGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101642"/>
+      <stop offset="0.65" stop-color="#2a3080"/>
+      <stop offset="1" stop-color="#4a3f8f"/>
+    </linearGradient>
+    <radialGradient id="moonGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff3c4" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#fff3c4" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5a3a28"/>
+      <stop offset="0.5" stop-color="#8a5a3c"/>
+      <stop offset="1" stop-color="#5a3a28"/>
+    </linearGradient>
+    <linearGradient id="brass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f0c869"/>
+      <stop offset="1" stop-color="#b8862e"/>
+    </linearGradient>
+    <clipPath id="win"><path d="M150 560 L150 170 C 150 70, 850 70, 850 170 L850 560 Z"/></clipPath>
+  </defs>
+
+  <!-- 벽: 세로 판자 -->
+  <rect width="1000" height="560" fill="url(#wall)"/>
+  <g stroke="#1e121c" stroke-width="2" opacity="0.6">
+    <path d="M40 0 V560 M85 0 V560 M130 0 V560 M870 0 V560 M915 0 V560 M960 0 V560"/>
+  </g>
+  <g fill="#ffffff" opacity="0.04">
+    <rect x="0" y="0" width="40" height="560"/><rect x="85" y="0" width="45" height="560"/><rect x="915" y="0" width="45" height="560"/>
+  </g>
+  <!-- 걸레받이 -->
+  <rect x="0" y="520" width="1000" height="40" fill="#22141f"/>
+
+  <!-- 창 밖 풍경 -->
+  <g clip-path="url(#win)">
+    <rect x="150" y="60" width="700" height="500" fill="url(#sky)"/>
+    <circle cx="700" cy="170" r="120" fill="url(#moonGlow)"/>
+    <!-- 초승달 -->
+    <path d="M700 118 A52 52 0 1 0 742 210 A42 42 0 1 1 700 118 Z" fill="#fff1bf" stroke="#e8c97a" stroke-width="2"/>
+    <circle cx="684" cy="160" r="5" fill="#f2dc9a"/><circle cx="676" cy="188" r="3" fill="#f2dc9a"/>
+    <!-- 별 (정지) -->
+    <g fill="#fff7d6">
+      <circle cx="230" cy="140" r="2"/><circle cx="300" cy="110" r="1.5"/><circle cx="420" cy="150" r="1.8"/>
+      <circle cx="560" cy="120" r="1.4"/><circle cx="800" cy="260" r="1.5"/><circle cx="210" cy="250" r="1.4"/>
+      <path d="M360 200 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3z"/>
+      <path d="M590 230 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z"/>
+    </g>
+    <!-- 구름 -->
+    <g fill="#5a5aa8" opacity="0.55">
+      <path d="M220 300 q20 -24 48 -10 q18 -22 46 -4 q26 -6 30 16 z"/>
+      <path d="M620 320 q16 -18 40 -8 q14 -18 38 -4 q24 -2 26 14 z"/>
+    </g>
+    <!-- 먼 산 -->
+    <path d="M150 400 L240 330 L300 370 L380 300 L470 380 L540 330 L640 390 L720 320 L800 370 L850 340 L850 560 L150 560 Z" fill="#2b2f6e"/>
+    <!-- 숲 -->
+    <g fill="#1d2156">
+      <path d="M150 440 C 220 410, 300 430, 360 415 C 440 395, 520 430, 600 412 C 680 395, 760 425, 850 410 L850 560 L150 560 Z"/>
+      <path d="M190 430 l14 -46 14 46z M230 420 l12 -38 12 38z M760 418 l14 -50 14 50z M800 424 l12 -40 12 40z M660 414 l10 -34 10 34z"/>
+    </g>
+    <!-- 마을 불빛 -->
+    <g>
+      <path d="M440 430 h40 v-26 l-20 -16 l-20 16 z" fill="#2a2a62"/>
+      <rect x="452" y="414" width="9" height="10" fill="#ffcf6b"/><rect x="466" y="414" width="8" height="10" fill="#ffcf6b" opacity="0.7"/>
+      <path d="M500 436 h46 v-30 l-23 -18 l-23 18 z" fill="#2a2a62"/>
+      <rect x="512" y="416" width="9" height="11" fill="#ffcf6b"/>
+      <path d="M560 432 h30 v-20 l-15 -12 l-15 12 z" fill="#2a2a62"/>
+      <rect x="570" y="418" width="8" height="8" fill="#ffcf6b" opacity="0.85"/>
+    </g>
+    <!-- 앞쪽 언덕과 길 -->
+    <path d="M150 470 C 300 450, 420 470, 520 460 C 640 448, 760 470, 850 460 L850 560 L150 560 Z" fill="#161a45"/>
+    <path d="M480 560 C 490 520, 470 490, 500 466 C 520 470, 530 500, 560 560 Z" fill="#2e2a5a"/>
+  </g>
+
+  <!-- 창틀 -->
+  <path d="M150 560 L150 170 C 150 70, 850 70, 850 170 L850 560" fill="none" stroke="#3d2518" stroke-width="40"/>
+  <path d="M150 560 L150 170 C 150 70, 850 70, 850 170 L850 560" fill="none" stroke="url(#frame)" stroke-width="30"/>
+  <path d="M136 560 L136 168 C 136 56, 864 56, 864 168 L864 560" fill="none" stroke="#2b1d3a" stroke-width="3"/>
+  <path d="M164 560 L164 172 C 164 84, 836 84, 836 172 L836 560" fill="none" stroke="#2b1d3a" stroke-width="3"/>
+  <!-- 황동 리벳 -->
+  <g fill="url(#brass)" stroke="#2b1d3a" stroke-width="1.5">
+    <circle cx="150" cy="220" r="5"/><circle cx="150" cy="320" r="5"/><circle cx="150" cy="420" r="5"/>
+    <circle cx="850" cy="220" r="5"/><circle cx="850" cy="320" r="5"/><circle cx="850" cy="420" r="5"/>
+    <circle cx="228" cy="104" r="5"/><circle cx="772" cy="104" r="5"/><circle cx="360" cy="80" r="5"/><circle cx="640" cy="80" r="5"/>
+  </g>
+  <!-- 꼭대기 장식: 달 문장 -->
+  <g transform="translate(500 66)">
+    <path d="M-34 0 L0 -26 L34 0 L0 26 Z" fill="#6b4430" stroke="#2b1d3a" stroke-width="3"/>
+    <circle r="15" fill="url(#brass)" stroke="#2b1d3a" stroke-width="2.5"/>
+    <path d="M4 -10 A11 11 0 1 0 4 10 A8 8 0 1 1 4 -10 Z" fill="#2b1d3a"/>
+  </g>
+
+  <!-- 왼쪽 벽 선반 -->
+  <g transform="translate(0 50)">
+    <rect x="18" y="300" width="104" height="12" rx="3" fill="#6b4430" stroke="#2b1d3a" stroke-width="3"/>
+    <path d="M30 312 l10 18 h6 l-8 -18 z M100 312 l-10 18 h-6 l8 -18 z" fill="#4a2f22"/>
+    <path d="M32 300 v-28 q0 -8 8 -8 h4 q8 0 8 8 v28 z" fill="#5bb3c9" stroke="#2b1d3a" stroke-width="2.5" opacity="0.95"/>
+    <rect x="36" y="258" width="12" height="7" rx="2" fill="#b07a4a" stroke="#2b1d3a" stroke-width="2"/>
+    <path d="M62 300 v-20 q0 -14 14 -14 q14 0 14 14 v20 z" fill="#c45b8a" stroke="#2b1d3a" stroke-width="2.5"/>
+    <rect x="71" y="258" width="10" height="9" rx="2" fill="#b07a4a" stroke="#2b1d3a" stroke-width="2"/>
+    <rect x="96" y="276" width="20" height="24" rx="3" fill="#d9b98a" stroke="#2b1d3a" stroke-width="2.5"/>
+  </g>
+  <!-- 오른쪽 벽: 말린 허브 -->
+  <g transform="translate(0 46)" stroke="#2b1d3a" stroke-width="2.5" stroke-linecap="round">
+    <path d="M880 290 h96" />
+    <path d="M900 290 v22 M930 290 v28 M960 290 v20" stroke-width="2"/>
+    <path d="M893 312 q7 22 7 30 q0 -8 7 -30 z" fill="#6aa86a"/>
+    <path d="M922 318 q8 24 8 32 q0 -8 8 -32 z" fill="#8fbf6a"/>
+    <path d="M953 310 q7 20 7 28 q0 -8 7 -28 z" fill="#5f9a7a"/>
+  </g>
+
+  <!-- 등불 (빛 번짐은 화면에서 따로 애니메이션) -->
+  <g id="lamps" stroke="#2b1d3a" stroke-linejoin="round">
+    <g transform="translate(70 0)">
+      <path d="M0 96 V184" stroke-width="4"/>
+      <path d="M-14 96 h28" stroke-width="5"/>
+      <path d="M-26 186 h52 l-8 14 h-36 z" fill="url(#brass)" stroke-width="3"/>
+      <path d="M-20 200 h40 l-5 56 h-30 z" fill="#ffd77a" stroke-width="3.5"/>
+      <path d="M-8 200 v56 M8 200 v56" stroke="#c99a3e" stroke-width="2.5"/>
+      <path d="M-22 256 h44 l-6 12 h-32 z" fill="url(#brass)" stroke-width="3"/>
+      <path d="M0 214 q8 12 0 24 q-8 -12 0 -24 z" fill="#fff4cf" stroke="none"/>
+    </g>
+    <g transform="translate(930 0)">
+      <path d="M0 96 V184" stroke-width="4"/>
+      <path d="M-14 96 h28" stroke-width="5"/>
+      <path d="M-26 186 h52 l-8 14 h-36 z" fill="url(#brass)" stroke-width="3"/>
+      <path d="M-20 200 h40 l-5 56 h-30 z" fill="#ffd77a" stroke-width="3.5"/>
+      <path d="M-8 200 v56 M8 200 v56" stroke="#c99a3e" stroke-width="2.5"/>
+      <path d="M-22 256 h44 l-6 12 h-32 z" fill="url(#brass)" stroke-width="3"/>
+      <path d="M0 214 q8 12 0 24 q-8 -12 0 -24 z" fill="#fff4cf" stroke="none"/>
+    </g>
+  </g>
+</svg>

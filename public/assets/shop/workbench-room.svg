@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <!-- 제조대 뒤쪽 벽 (직접 제작한 SVG): 돌벽, 둥근 창, 선반, 허브. 가운데(솥 자리)는 비워 둔다 -->
+  <defs>
+    <radialGradient id="warm" cx="0.5" cy="0.62" r="0.6">
+      <stop offset="0" stop-color="#5a3f6e"/><stop offset="1" stop-color="#231a3f"/>
+    </radialGradient>
+    <linearGradient id="brass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f0c869"/><stop offset="1" stop-color="#b8862e"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#warm)"/>
+  <!-- 돌벽 줄눈 -->
+  <g stroke="#1b1433" stroke-width="2" fill="none" opacity="0.5">
+    <path d="M0 80 H800 M0 160 H800 M0 240 H800 M0 320 H800 M0 400 H800"/>
+    <path d="M90 0 V80 M260 0 V80 M450 0 V80 M630 0 V80 M170 80 V160 M360 80 V160 M560 80 V160 M720 80 V160 M60 160 V240 M740 160 V240 M120 240 V320 M680 240 V320 M80 320 V400 M720 320 V400"/>
+  </g>
+  <!-- 둥근 창 -->
+  <g transform="translate(400 92)">
+    <circle r="62" fill="#3d2518" />
+    <circle r="54" fill="#18205a"/>
+    <path d="M-14 -44 A18 18 0 1 0 -6 -10 A14 14 0 1 1 -14 -44 Z" fill="#fff1bf"/>
+    <g fill="#fff7d6"><circle cx="-28" cy="-14" r="2"/><circle cx="-12" cy="20" r="1.6"/><circle cx="30" cy="30" r="1.4"/></g>
+    <path d="M-54 0 H54 M0 -54 V54" stroke="#6b4430" stroke-width="6"/>
+    <circle r="54" fill="none" stroke="url(#brass)" stroke-width="6"/>
+    <circle r="62" fill="none" stroke="#2b1d3a" stroke-width="3"/>
+  </g>
+  <!-- 왼쪽 선반 -->
+  <g stroke="#2b1d3a" stroke-linejoin="round">
+    <rect x="20" y="210" width="170" height="14" rx="3" fill="#8a5a3c" stroke-width="3"/>
+    <path d="M40 224 l12 22 h8 l-10 -22 z M170 224 l-12 22 h-8 l10 -22 z" fill="#5e3d29"/>
+    <path d="M36 210 v-34 q0 -10 10 -10 h6 q10 0 10 10 v34 z" fill="#7fd0e0" stroke-width="2.5"/>
+    <rect x="42" y="158" width="14" height="9" rx="2" fill="#b07a4a" stroke-width="2"/>
+    <path d="M78 210 v-24 q0 -16 16 -16 q16 0 16 16 v24 z" fill="#d06b9a" stroke-width="2.5"/>
+    <rect x="88" y="160" width="12" height="10" rx="2" fill="#b07a4a" stroke-width="2"/>
+    <rect x="124" y="176" width="26" height="34" rx="4" fill="#e3c590" stroke-width="2.5"/>
+    <path d="M124 186 h26" stroke-width="2"/>
+    <path d="M160 210 v-46 h18 v46 z" fill="#6b4430" stroke-width="2.5"/>
+    <path d="M163 172 h12 M163 182 h12" stroke="#f0c869" stroke-width="2"/>
+  </g>
+  <!-- 오른쪽 선반: 책과 병 -->
+  <g stroke="#2b1d3a" stroke-linejoin="round">
+    <rect x="610" y="210" width="170" height="14" rx="3" fill="#8a5a3c" stroke-width="3"/>
+    <path d="M630 224 l12 22 h8 l-10 -22 z M760 224 l-12 22 h-8 l10 -22 z" fill="#5e3d29"/>
+    <rect x="626" y="166" width="16" height="44" fill="#3f6fb0" stroke-width="2.5"/>
+    <rect x="642" y="172" width="14" height="38" fill="#b0443f" stroke-width="2.5"/>
+    <rect x="656" y="160" width="18" height="50" fill="#4f8a5a" stroke-width="2.5"/>
+    <path d="M680 210 l10 -40 l14 4 l-10 40 z" fill="#8a5bd6" stroke-width="2.5"/>
+    <path d="M720 210 v-22 q0 -14 14 -14 q14 0 14 14 v22 z" fill="#ffd77a" stroke-width="2.5" opacity="0.9"/>
+    <rect x="729" y="164" width="10" height="9" rx="2" fill="#b07a4a" stroke-width="2"/>
+  </g>
+  <!-- 걸린 허브와 국자 -->
+  <g stroke="#2b1d3a" stroke-width="2.5" stroke-linecap="round">
+    <path d="M240 30 h90"/>
+    <path d="M256 30 v18 M286 30 v24 M316 30 v16" stroke-width="2"/>
+    <path d="M249 48 q7 20 7 28 q0 -8 7 -28 z" fill="#6aa86a"/>
+    <path d="M279 54 q7 22 7 30 q0 -8 7 -30 z" fill="#8fbf6a"/>
+    <path d="M309 46 q7 18 7 26 q0 -8 7 -26 z" fill="#5f9a7a"/>
+    <path d="M520 30 v60" stroke="#6b4430" stroke-width="5"/>
+    <path d="M506 90 q14 22 28 0 z" fill="#c99a3e"/>
+  </g>
+</svg>

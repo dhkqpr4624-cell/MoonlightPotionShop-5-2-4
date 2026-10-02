@@ -4,7 +4,7 @@
  *  - 결과: 같은 자리에서 해설로 바뀐다. 오답이면 입력한 양(빨강)과 필요한 양을 글로 구분하고 계산 과정을 보여 준다.
  *  - '이 양으로 투입하기'를 눌러야 투입된다 (자동 투입 없음)
  */
-import { useEffect, useState, type Dispatch } from "react";
+import { useEffect, useRef, useState, type Dispatch } from "react";
 import { getIngredient } from "../data/ingredients.ts";
 import { LEARNING_TYPES } from "../data/learningTypes.ts";
 import { CHOICE_LABEL, hintCard, resultSummary, solutionSteps } from "../game/explain.ts";
@@ -12,7 +12,9 @@ import { MAX_HINT_LEVEL, type Action } from "../game/reducer.ts";
 import type { Feedback, HintVisual, IngredientTask, Order, ShiftChoice } from "../game/types.ts";
 import { josa } from "../lib/josa.ts";
 import { Keypad } from "./Keypad.tsx";
-import { IngredientIcon } from "./art/PotionArt.tsx";
+import { IngredientArt } from "./art/PotionArt.tsx";
+import { Icon } from "./Icon.tsx";
+import { playSfx } from "../audio/sfx.ts";
 
 const CHOICES: ShiftChoice[] = ["x10", "same", "d10"];
 
@@ -38,6 +40,17 @@ export function MeasurePanel({
   const now = () => new Date().toISOString();
   const concept = task.mode === "concept" && task.concept;
 
+  // 이 패널에서 방금 답을 확정했을 때만 부드러운 결과음 (새로고침해 결과 화면으로 돌아오면 소리 없음)
+  const prevStatus = useRef(task.status);
+  const prevId = useRef(task.problemId);
+  useEffect(() => {
+    if (prevId.current === task.problemId && prevStatus.current === "pending" && task.status === "measured") {
+      playSfx(task.correct ? "correct" : "wrong");
+    }
+    prevStatus.current = task.status;
+    prevId.current = task.problemId;
+  }, [task.status, task.problemId, task.correct]);
+
   const question = concept
     ? "이번 달빛 이슬 양은 지난번의 몇 배일까요?"
     : `${josa(ing.name, "은/는")} 몇 ${ing.unit} 넣을까요?`;
@@ -45,7 +58,7 @@ export function MeasurePanel({
   return (
     <div className="measure" data-testid="measure-panel" data-mode={task.mode}>
       <div className="measure-head">
-        <IngredientIcon ingredient={ing} size={40} />
+        <IngredientArt ingredient={ing} size={46} />
         <div className="measure-title">
           <h2 data-testid="measure-name">{ing.name} <span className="unit-chip">{ing.unit}</span></h2>
           <div className="badges">
@@ -61,7 +74,7 @@ export function MeasurePanel({
 
       <p className="measure-question" data-testid="question">{question}</p>
       <p className="measure-memo">
-        📜 {order.script.memo[0].replace("포션: ", "")} · {order.script.memo.find((m) => m.startsWith(`${ing.name}(`)) ?? order.script.memo[1]}
+        <Icon name="memo" size={16} /> {order.script.memo[0].replace("포션: ", "")} · {order.script.memo.find((m) => m.startsWith(`${ing.name}(`)) ?? order.script.memo[1]}
       </p>
 
       {pending ? (
@@ -101,7 +114,7 @@ export function MeasurePanel({
               disabled={locked || task.hintLevel >= MAX_HINT_LEVEL}
               data-testid="hint"
             >
-              💡 힌트 {task.hintLevel < MAX_HINT_LEVEL ? `${task.hintLevel + 1}단계 보기` : "모두 봤어요"}
+              <Icon name="bulb" size={18} /> 힌트 {task.hintLevel < MAX_HINT_LEVEL ? `${task.hintLevel + 1}단계 보기` : "모두 봤어요"}
             </button>
             <button type="button" className="btn btn-quiet" onClick={() => dispatch({ type: "CANCEL_MEASURE", orderId: order.id })} disabled={locked} data-testid="cancel-measure">
               선반으로 되돌리기
@@ -168,7 +181,9 @@ function ResultView({ order, task, dispatch, locked, index }: { order: Order; ta
 
   return (
     <div className={`result ${wrong ? "is-wrong" : "is-right"}`} data-testid="result" data-correct={String(!wrong)}>
-      <p className="result-headline" role="status">{wrong ? "✗ " : "✓ "}{summary.headline}</p>
+      <p className="result-headline" role="status">
+        <Icon name={wrong ? "close" : "check"} size={18} /> {summary.headline}
+      </p>
       <dl className="result-values">
         <div className="rv rv-mine">
           <dt>{concept ? "고른 답" : "입력한 양"}</dt>
@@ -209,6 +224,7 @@ function ResultView({ order, task, dispatch, locked, index }: { order: Order; ta
         disabled={locked}
         onClick={() => dispatch({ type: "ADD_TO_CAULDRON", orderId: order.id, taskIndex: index })}
         data-testid="add-to-cauldron"
+        data-sfx="none"
       >
         {concept ? "자동 계량해서 투입하기" : wrong ? "이 양으로 투입하기" : "이 양으로 투입하기"}
       </button>

@@ -1,4 +1,7 @@
+import type { ReactNode } from "react";
 import { assetUrl } from "../lib/assets.ts";
+import { Icon } from "./Icon.tsx";
+import { SHOP_ART } from "../data/shopArt.ts";
 import { downloadText } from "../lib/download.ts";
 import { currentOrder } from "../game/reducer.ts";
 import type { GameState } from "../game/types.ts";
@@ -28,6 +31,7 @@ export function TitleScreen({
   onReset,
   onImport,
   onRecords,
+  sound,
 }: {
   state: GameState;
   loadIssue: LoadIssue | null;
@@ -36,16 +40,22 @@ export function TitleScreen({
   onReset: () => void;
   onImport: (next: GameState) => void;
   onRecords: () => void;
+  sound?: ReactNode;
 }) {
   const hasProgress = state.day !== null || state.money > 0 || (state.problemLog.length + state.legacyRecords.length) > 0;
   const closed = state.day?.status === "closed";
   const status = statusText(state);
 
   return (
+    <div className="title-wrap">
+      <img className="title-backdrop" src={assetUrl(SHOP_ART.counterRoom)} alt="" aria-hidden="true" data-testid="title-backdrop" />
+      {sound && <div className="title-sound">{sound}</div>}
     <div className="title-screen">
-      <img className="title-logo" src={assetUrl("assets/ui/moon-logo.svg")} alt="" width={140} height={140} data-testid="logo" />
-      <h1 className="title-name">달빛 포션 상점</h1>
-      <p className="title-sub">밤에만 문을 여는 작은 포션 가게. 레시피대로 재료를 계산해 포션을 만들어요.</p>
+      <div className="title-sign">
+        <img className="title-logo" src={assetUrl("assets/ui/moon-logo.svg")} alt="" width={96} height={96} data-testid="logo" />
+        <h1 className="title-name">달빛 포션 상점</h1>
+        <p className="title-sub">밤에만 문을 여는 작은 포션 가게. 레시피대로 재료를 계산해 포션을 만들어요.</p>
+      </div>
 
       {loadIssue ? (
         <div className="recovery" role="alert" data-testid="recovery">
@@ -89,7 +99,7 @@ export function TitleScreen({
               이전 버전(Phase {migratedFrom})의 저장을 새 형식으로 옮겼어요. 달빛 동전과 학습 기록은 그대로예요. 진행 중이던 하루는 이전 규칙으로 마치고, 다음 영업부터 새 규칙이 적용돼요.
             </p>
           )}
-          <button type="button" className="btn btn-primary btn-big" onClick={onStart} data-testid="start">
+          <button type="button" className="btn btn-primary btn-big btn-start" onClick={onStart} data-testid="start" data-sfx={state.day ? "click" : "none"}>
             {!state.day ? "가게 문 열기" : closed ? "이어하기 (영업 마감 결과 보기)" : "이어서 영업하기"}
           </button>
           {status && (
@@ -102,7 +112,7 @@ export function TitleScreen({
 
       {!loadIssue && hasProgress && (
         <button type="button" className="btn btn-light" onClick={onRecords} data-testid="open-records">
-          📒 학습 기록 보기
+          <Icon name="records" size={20} /> 학습 기록 보기
         </button>
       )}
 
@@ -119,7 +129,8 @@ export function TitleScreen({
           처음부터 다시 하기
         </button>
       )}
-      <p className="title-phase">3단계 시험판 · 직접 만드는 포션과 학습 기록</p>
+      <p className="title-phase">4단계 시험판 · 손님과 가게를 새로 그렸어요</p>
+    </div>
     </div>
   );
 }

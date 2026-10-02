@@ -30,9 +30,7 @@ import {
 } from "./types.ts";
 
 export const MAX_HINT_LEVEL = 3;
-/** 젓기 버튼 한 번에 올라가는 양 (4번이면 완료) */
-export const STIR_BUTTON_STEP = 25;
-/** 드래그 젓기 한 번 전송의 최대 양 */
+/** 젓기 한 번 전송(STIR 액션)의 최대 양. Phase 4부터 젓기 버튼은 없고 막대 드래그·키보드로만 젓는다 */
 export const STIR_MAX_STEP = 25;
 
 export type Action =

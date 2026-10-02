@@ -35,7 +35,7 @@ export function Keypad({
       <button type="button" className="key key-clear" disabled={disabled} onClick={() => onKey("clear")}>
         전체 지우기
       </button>
-      <button type="button" className="key key-submit" disabled={disabled} onClick={onSubmit} data-testid="submit">
+      <button type="button" className="key key-submit" disabled={disabled} onClick={onSubmit} data-testid="submit" data-sfx="none">
         {submitLabel}
       </button>
     </div>

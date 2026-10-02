@@ -15,7 +15,9 @@ export interface PotionLook {
   liquid: string;
   glow: string;
   particle: "star" | "leaf" | "mist" | "spark";
-  bottle: "round" | "tall" | "flask";
+  bottle: "round" | "tall" | "flask" | "drop";
+  /** 라벨 문양 */
+  emblem: "star" | "flame" | "leaf" | "cloud";
 }
 
 export interface Recipe {
@@ -42,7 +44,7 @@ export const RECIPES: Record<string, Recipe> = {
       { ingredientId: "moonDew", amount: "0.6" },
       { ingredientId: "starDust", amount: "0.25" },
     ],
-    look: { liquid: "#3d7bff", glow: "#9cc8ff", particle: "star", bottle: "round" },
+    look: { liquid: "#3d7bff", glow: "#9cc8ff", particle: "star", bottle: "round", emblem: "star" },
     lookText: "푸른 액체 속에 별 입자가 반짝여요",
     glowWord: "별빛",
     pricePerBottle: 5,
@@ -56,7 +58,7 @@ export const RECIPES: Record<string, Recipe> = {
       { ingredientId: "moonDew", amount: "4" },
       { ingredientId: "starDust", amount: "2" },
     ],
-    look: { liquid: "#e2483d", glow: "#ffb07a", particle: "spark", bottle: "tall" },
+    look: { liquid: "#e2483d", glow: "#ffb07a", particle: "spark", bottle: "tall", emblem: "flame" },
     lookText: "붉은 액체에서 작은 불꽃 방울이 톡톡 튀어요",
     glowWord: "불꽃빛",
     pricePerBottle: 5,
@@ -70,7 +72,7 @@ export const RECIPES: Record<string, Recipe> = {
       { ingredientId: "moonDew", amount: "0.8" },
       { ingredientId: "starDust", amount: "0.4" },
     ],
-    look: { liquid: "#3fae5a", glow: "#b8f2a0", particle: "leaf", bottle: "flask" },
+    look: { liquid: "#3fae5a", glow: "#b8f2a0", particle: "leaf", bottle: "flask", emblem: "leaf" },
     lookText: "초록 액체 속에 작은 잎이 둥둥 떠 있어요",
     glowWord: "초록빛",
     pricePerBottle: 5,
@@ -84,7 +86,7 @@ export const RECIPES: Record<string, Recipe> = {
       { ingredientId: "moonDew", amount: "0.35" },
       { ingredientId: "starDust", amount: "0.15" },
     ],
-    look: { liquid: "#8a5bd6", glow: "#d9c6ff", particle: "mist", bottle: "round" },
+    look: { liquid: "#8a5bd6", glow: "#d9c6ff", particle: "mist", bottle: "drop", emblem: "cloud" },
     lookText: "보랏빛 액체 위로 안개가 피어올라요",
     glowWord: "보랏빛",
     pricePerBottle: 5,

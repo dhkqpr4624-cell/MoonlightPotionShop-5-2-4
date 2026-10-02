@@ -7,6 +7,7 @@ import { buildLearningExport, buildSaveExport, exportFileName, parseImportText }
 import type { GameState } from "../game/types.ts";
 import { downloadJson, readFileText } from "../lib/download.ts";
 import { newSeed } from "../lib/rng.ts";
+import { Icon } from "./Icon.tsx";
 
 function describe(state: GameState | null): string {
   if (!state || !state.day) return state ? `영업 시작 전 · 달빛 동전 ${state.money}개` : "없음";
@@ -63,7 +64,7 @@ export function DataMenu({
 
   return (
     <details className="data-menu" open={defaultOpen || undefined} data-testid="data-menu">
-      <summary>💾 저장·기록 관리</summary>
+      <summary><Icon name="save" size={18} /> 저장·기록 관리</summary>
       <div className="data-menu-body">
         <div className="data-menu-buttons">
           <button type="button" className="btn btn-light" onClick={exportSave} disabled={!canExport} data-testid="export-save">

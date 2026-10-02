@@ -1,7 +1,8 @@
 /**
- * 학생 자신의 학습 기록 (타이틀 → 📒 학습 기록 보기). 순위·비교 없이 내 기록만 보여 준다.
+ * 학생 자신의 학습 기록 (타이틀 → 학습 기록 보기). 순위·비교 없이 내 기록만 보여 준다.
  */
 import { useState } from "react";
+import { Icon } from "./Icon.tsx";
 import { LEARNING_TYPES } from "../data/learningTypes.ts";
 import { KIND_LABEL, MODE_LABEL, orderRows, problemRows, typeStats } from "../game/learningLog.ts";
 import type { GameState } from "../game/types.ts";
@@ -24,8 +25,8 @@ export function LearningRecords({ state, onBack }: { state: GameState; onBack: (
   return (
     <div className="records" data-testid="records">
       <header className="records-head">
-        <button type="button" className="btn btn-light" onClick={onBack} data-testid="records-back">← 처음 화면</button>
-        <h1>📒 나의 학습 기록</h1>
+        <button type="button" className="btn btn-light" onClick={onBack} data-testid="records-back"><Icon name="back" size={18} /> 처음 화면</button>
+        <h1><Icon name="records" size={26} /> 나의 학습 기록</h1>
       </header>
       <div className="tabs records-tabs" role="tablist">
         {tabs.map(([key, label]) => (

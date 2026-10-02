@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 160" width="1000" height="160" preserveAspectRatio="none">
+  <!-- 나무 카운터 (직접 제작한 SVG). 가로로 늘어나도 어색하지 않게 단순한 판자 결 -->
+  <defs>
+    <linearGradient id="top" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a8744f"/><stop offset="1" stop-color="#8a5a3c"/>
+    </linearGradient>
+    <linearGradient id="front" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6b4430"/><stop offset="1" stop-color="#4a2f22"/>
+    </linearGradient>
+    <linearGradient id="brass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f0c869"/><stop offset="1" stop-color="#b8862e"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="1000" height="26" fill="url(#top)"/>
+  <rect x="0" y="0" width="1000" height="4" fill="#c8946a"/>
+  <rect x="0" y="26" width="1000" height="8" fill="url(#brass)"/>
+  <rect x="0" y="34" width="1000" height="126" fill="url(#front)"/>
+  <g stroke="#3d2518" stroke-width="3" opacity="0.7">
+    <path d="M0 34 H1000"/><path d="M125 34 V160 M250 34 V160 M375 34 V160 M500 34 V160 M625 34 V160 M750 34 V160 M875 34 V160"/>
+  </g>
+  <g fill="none" stroke="#7a4e35" stroke-width="2" opacity="0.6">
+    <path d="M20 70 q30 -8 60 0 t60 0"/><path d="M270 100 q30 -8 60 0 t60 0"/><path d="M520 64 q30 -8 60 0 t60 0"/><path d="M780 110 q30 -8 60 0 t60 0"/>
+  </g>
+</svg>

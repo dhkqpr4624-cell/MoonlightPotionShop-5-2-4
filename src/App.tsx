@@ -8,6 +8,10 @@ import { CounterScene } from "./components/CounterScene.tsx";
 import { WorkbenchScene } from "./components/WorkbenchScene.tsx";
 import { ClosingScene } from "./components/ClosingScene.tsx";
 import { LearningRecords } from "./components/LearningRecords.tsx";
+import { SoundSettings } from "./components/SoundSettings.tsx";
+import { Icon } from "./components/Icon.tsx";
+import { applySoundSettings, playSfx, unlockAudio, type SfxName } from "./audio/sfx.ts";
+import { loadSoundSettings, saveSoundSettings, type SoundSettings as SoundPrefs } from "./audio/settings.ts";
 
 type RootAction = Action | { type: "RESET" } | { type: "REPLACE_STATE"; state: GameState };
 
@@ -46,6 +50,35 @@ export default function App() {
   const [migratedFrom, setMigratedFrom] = useState<number | null>(bootInfo.migratedFrom);
   const [shutterFx, setShutterFx] = useState<ShutterFx>(null);
   const [showRecords, setShowRecords] = useState(false);
+  const [sound, setSound] = useState<SoundPrefs>(loadSoundSettings);
+
+  const changeSound = useCallback((next: SoundPrefs) => {
+    setSound(next);
+    saveSoundSettings(next);
+    applySoundSettings(next);
+  }, []);
+
+  // 첫 클릭·터치·키 입력에서 오디오를 깨우고, 버튼을 누르면 버튼 효과음 (data-sfx로 바꾸거나 none으로 끔)
+  useEffect(() => {
+    applySoundSettings(sound);
+    const unlock = () => unlockAudio();
+    const onClick = (e: MouseEvent) => {
+      const el = e.target instanceof Element ? e.target.closest("button") : null;
+      if (!el || (el as HTMLButtonElement).disabled) return;
+      const name = (el as HTMLElement).dataset.sfx ?? "click";
+      if (name !== "none") playSfx(name as SfxName);
+    };
+    window.addEventListener("pointerdown", unlock, true);
+    window.addEventListener("keydown", unlock, true);
+    window.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("pointerdown", unlock, true);
+      window.removeEventListener("keydown", unlock, true);
+      window.removeEventListener("click", onClick, true);
+    };
+    // 설정 변경은 changeSound에서 반영한다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 상태가 바뀔 때마다 저장. 읽지 못한 저장이 있으면 사용자가 고를 때까지 저장하지 않는다.
   useEffect(() => {
@@ -69,7 +102,10 @@ export default function App() {
 
   const start = () => {
     if (shutterFx) return;
-    if (!state.day) setShutterFx("opening"); // 첫 영업: 덧문을 열고 첫 손님 등장
+    if (!state.day) {
+      setShutterFx("opening"); // 첫 영업: 덧문을 열고 첫 손님 등장
+      playSfx("shutterOpen");
+    }
     setMigratedFrom(null);
     dispatch({ type: "START", seed: newSeed() });
   };
@@ -83,6 +119,7 @@ export default function App() {
   const nextDay = () => {
     if (shutterFx || !state.day || state.day.status !== "closed") return;
     setShutterFx("opening");
+    playSfx("shutterOpen");
     dispatch({ type: "NEXT_DAY", fromDay: state.day.dayNumber, seed: newSeed() });
   };
 
@@ -97,14 +134,17 @@ export default function App() {
       {inGame && (
         <header className="top-bar">
           <button type="button" className="btn btn-ghost small" onClick={() => dispatch({ type: "GO_TITLE" })} disabled={shutterFx !== null}>
-            ☾ 처음 화면
+            <Icon name="home" size={18} /> 처음 화면
           </button>
           <div className="day-badge" data-testid="day-badge">
             밤 {day.dayNumber}일차 · {day.status === "closed" ? "영업 마감" : `손님 ${day.currentIndex + 1} / ${day.orders.length}`}
           </div>
-          <div className="money" data-testid="money" aria-label={`달빛 동전 ${state.money}개`}>
-            <span className="coin" aria-hidden="true">🌙</span>
-            <span data-testid="money-value">{state.money}</span>
+          <div className="top-right">
+            <SoundSettings value={sound} onChange={changeSound} />
+            <div className="money" data-testid="money" aria-label={`달빛 동전 ${state.money}개`}>
+              <Icon name="coin" size={22} />
+              <span data-testid="money-value">{state.money}</span>
+            </div>
           </div>
         </header>
       )}
@@ -119,6 +159,7 @@ export default function App() {
             onReset={reset}
             onImport={applyImport}
             onRecords={() => setShowRecords(true)}
+            sound={<SoundSettings value={sound} onChange={changeSound} light />}
           />
         )}
         {inGame && state.scene === "counter" && (

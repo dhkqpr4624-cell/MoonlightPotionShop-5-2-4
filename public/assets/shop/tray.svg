@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60" width="240" height="60">
+  <!-- 포션을 건네는 황동 받침 (직접 제작한 SVG) -->
+  <defs><linearGradient id="b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6d27a"/><stop offset="1" stop-color="#b8862e"/></linearGradient></defs>
+  <ellipse cx="120" cy="36" rx="112" ry="20" fill="#3d2518" opacity="0.45"/>
+  <ellipse cx="120" cy="30" rx="112" ry="20" fill="url(#b)" stroke="#2b1d3a" stroke-width="3"/>
+  <ellipse cx="120" cy="28" rx="92" ry="13" fill="#e0b24e" stroke="#9c6f24" stroke-width="2"/>
+  <path d="M40 24 q80 -14 160 0" fill="none" stroke="#fff3c4" stroke-width="2.5" opacity="0.6"/>
+</svg>

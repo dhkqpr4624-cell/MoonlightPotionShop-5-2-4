@@ -9,6 +9,7 @@ import type { DayState, GameState } from "../game/types.ts";
 import { NightBackdrop } from "./art/NightBackdrop.tsx";
 import { ClosedSign, Shutters } from "./art/Shutters.tsx";
 import { AnimalArt } from "./art/AnimalArt.tsx";
+import { Icon } from "./Icon.tsx";
 import { getCustomer } from "../data/customers.ts";
 
 export const CLOSE_ANIM_MS = 1700;
@@ -45,8 +46,8 @@ export function ClosingScene({
         ["응대한 손님", `${summary.customersServed}명`, "customers"],
         ["여러 병 주문 판매", `${summary.bottlesSold}병`, "bottles"],
         ["맞춤·특별 주문 제조", `${summary.specialOrders ?? 0}건`, "special"],
-        ["오늘 얻은 판매금", `🌙 ${summary.moneyEarned}`, "earned"],
-        ["현재 소지금", `🌙 ${state.money}`, "money"],
+        ["오늘 얻은 판매금", `${summary.moneyEarned}`, "earned"],
+        ["현재 소지금", `${state.money}`, "money"],
         ["계산 문제", `${summary.totalProblems}개`, "total"],
         ["정확하게 계량", `${summary.firstTryCorrect}개`, "first"],
         ["다르게 계량", `${summary.wrong ?? 0}개`, "wrong"],
@@ -58,8 +59,8 @@ export function ClosingScene({
         ["영업 일차", `밤 ${summary.dayNumber}일차`, "day"],
         ["응대한 손님", `${summary.customersServed}명`, "customers"],
         ["판매한 포션", `${summary.bottlesSold}병`, "bottles"],
-        ["오늘 얻은 판매금", `🌙 ${summary.moneyEarned}`, "earned"],
-        ["현재 소지금", `🌙 ${state.money}`, "money"],
+        ["오늘 얻은 판매금", `${summary.moneyEarned}`, "earned"],
+        ["현재 소지금", `${state.money}`, "money"],
         ["전체 문제", `${summary.totalProblems}개`, "total"],
         ["첫 시도에 맞힘", `${summary.firstTryCorrect}개`, "first"],
         ["다시 계산해서 해결", `${summary.correctedAfterWrong}개`, "corrected"],
@@ -73,7 +74,7 @@ export function ClosingScene({
 
   return (
     <div className="closing" data-testid="closing">
-      <NightBackdrop />
+      <NightBackdrop dim />
       {animate && (
         <div className="closing-leaving-customer" aria-hidden="true">
           <AnimalArt species={getCustomer(day.orders[day.orders.length - 1].customerId).artKey} mood="happy" />
@@ -92,7 +93,10 @@ export function ClosingScene({
             {tiles.map(([label, value, key]) => (
               <div key={key} className={`result-tile tile-${key}`}>
                 <dt>{label}</dt>
-                <dd data-testid={`result-${key}`}>{value}</dd>
+                <dd data-testid={`result-${key}`}>
+                  {(key === "earned" || key === "money") && <Icon name="coin" size={20} />}
+                  {value}
+                </dd>
               </div>
             ))}
           </dl>
@@ -107,8 +111,8 @@ export function ClosingScene({
             <button type="button" className="btn btn-ghost-dark btn-big" onClick={onTitle} disabled={busy} data-testid="closing-title">
               타이틀로
             </button>
-            <button type="button" className="btn btn-primary btn-big" onClick={onNextDay} disabled={busy} data-testid="next-day">
-              🌙 다음 날 영업
+            <button type="button" className="btn btn-primary btn-big" onClick={onNextDay} disabled={busy} data-testid="next-day" data-sfx="none">
+              <Icon name="moon" /> 다음 날 영업
             </button>
           </div>
         </section>
