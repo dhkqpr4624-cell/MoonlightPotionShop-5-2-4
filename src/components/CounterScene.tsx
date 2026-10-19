@@ -1,33 +1,38 @@
 /**
- * 창구 (Phase 4). 창 너머 손님이 가운데 서 있고 아래에 나무 카운터가 있다.
+ * 창구 (Phase 4, PNG 창구). 창밖 손님이 아치 창 안에 서 있고 아래에 나무 테이블이 있다(art/ShopScene.tsx).
  * 카운터 왼쪽: 주문서 / 가운데: 포션을 건네는 받침 / 오른쪽: 행동 버튼(위치 고정).
  * 손님 표정: 주문(order) · 쉬운 설명(explain) · 만족(happy) · 조금 아쉬움(meh) · 불만족(sad)
  * 등장·퇴장·반응은 화면 연출일 뿐이고, 판매금·다음 손님은 버튼을 누른 즉시 상태로 처리된다.
  */
-import { useEffect, useState, type Dispatch } from "react";
-import { getCustomer, type Customer } from "../data/customers.ts";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type Dispatch } from "react";
+import { getCustomer } from "../data/customers.ts";
+import { appearanceOf, type Appearance } from "../data/appearances.ts";
 import { getRecipe } from "../data/recipes.ts";
 import { SHOP_ART } from "../data/shopArt.ts";
 import { assetUrl } from "../lib/assets.ts";
 import { isLastCustomer, type Action } from "../game/reducer.ts";
 import { QUALITY_LABEL, QUALITY_PERCENT } from "../game/outcome.ts";
 import type { DayState, Order } from "../game/types.ts";
-import { AnimalArt, type Mood } from "./art/AnimalArt.tsx";
+import type { Mood } from "./art/AnimalArt.tsx";
 import { PotionBottle } from "./art/PotionArt.tsx";
-import { NightBackdrop } from "./art/NightBackdrop.tsx";
-import { Shutters } from "./art/Shutters.tsx";
+import { SceneNpc, ShopScene, npcBox, useSceneLayout, type SceneLayout } from "./art/ShopScene.tsx";
 import { Icon } from "./Icon.tsx";
 import { IntroCard } from "./IntroCard.tsx";
 
 export const OPEN_ANIM_MS = 1500;
 const LEAVE_MS = 700;
 
-function CustomerSprite({ customer, mood }: { customer: Customer; mood: Mood }) {
-  const [broken, setBroken] = useState(false);
-  if (customer.image && !broken) {
-    return <img className="customer-img" src={assetUrl(customer.image)} alt={customer.name} onError={() => setBroken(true)} />;
-  }
-  return <AnimalArt species={customer.artKey} mood={mood} label={`${customer.species} ${customer.name}`} />;
+/** 대사창 자리: 넓은 화면은 손님 오른쪽(얼굴 옆), 좁은 화면은 위쪽 가득 */
+function speechStyle(app: Appearance | null, layout: SceneLayout): { style: CSSProperties; side: boolean } {
+  const pad = 12;
+  if (!app || layout.narrow) return { style: { left: pad, right: pad, top: pad }, side: false };
+  const b = npcBox(app, layout);
+  const standScreenX = layout.sceneLeft + (b.left + app.display.centerX * b.k) * layout.s;
+  const left = standScreenX + 200 * layout.s;
+  const width = Math.min(430, layout.width - left - 16);
+  if (width < 280) return { style: { left: pad, right: pad, top: pad }, side: false };
+  const headTop = layout.sceneTop + (b.top + Math.max(0, app.display.headY - 260) * b.k) * layout.s;
+  return { style: { left, width, top: Math.max(pad, headTop) }, side: true };
 }
 
 function moodOf(order: Order): Mood {
@@ -52,7 +57,34 @@ export function CounterScene({
   onCloseDay: () => void;
 }) {
   const customer = getCustomer(order.customerId);
+  const app = appearanceOf(order);
   const recipe = getRecipe(order.recipeId);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const layout = useSceneLayout(boxRef, contentRef);
+  // 좁은 화면: 위에 놓인 대사창 높이만큼 손님 귀 끝을 내려 둔다
+  const speechRef = useRef<HTMLDivElement | null>(null);
+  const [speechBottom, setSpeechBottom] = useState(0);
+  useLayoutEffect(() => {
+    const el = speechRef.current;
+    if (!el) return;
+    const measure = () => setSpeechBottom(el.offsetTop + el.offsetHeight);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [order.id, layout.narrow, layout.width, layout.height]);
+
+  // 오늘 손님들의 그림을 미리 읽어 다음 손님이 바로 보이게
+  useEffect(() => {
+    for (const o of day.orders) {
+      const a = appearanceOf(o);
+      if (!a) continue;
+      const img = new Image();
+      img.src = assetUrl(a.image);
+    }
+  }, [day.dayNumber, day.orders.length]);
 
   // 판매 연출: '전달하기'를 누른 렌더에서 바로 잠가 더블클릭이 다음 버튼을 누르지 못하게
   const [celebrating, setCelebrating] = useState(false);
@@ -74,7 +106,7 @@ export function CounterScene({
   }, [opening, onOpenEnd]);
 
   // 다음 손님: 앞 손님은 인사하며 퇴장(연출), 새 손님 등장. 그동안 '오케이'는 잠금
-  const [leaving, setLeaving] = useState<{ customer: Customer; mood: Mood; key: string } | null>(null);
+  const [leaving, setLeaving] = useState<{ order: Order; mood: Mood; key: string } | null>(null);
   useEffect(() => {
     if (!leaving) return;
     const t = window.setTimeout(() => setLeaving(null), LEAVE_MS + 200);
@@ -82,7 +114,7 @@ export function CounterScene({
   }, [leaving]);
   const callNext = () => {
     if (order.status !== "paid") return;
-    setLeaving({ customer, mood: moodOf(order), key: order.id });
+    setLeaving({ order, mood: moodOf(order), key: order.id });
     dispatch({ type: "NEXT_CUSTOMER", fromOrderId: order.id });
   };
 
@@ -97,26 +129,52 @@ export function CounterScene({
     : order.status === "bottled" ? ["와, 제 포션이에요?"]
     : [order.script.reaction ?? ""];
 
+  const speech = speechStyle(app, layout);
+  const reserveTop = speech.side ? 0 : speechBottom + 8;
+  const leavingApp = leaving ? appearanceOf(leaving.order) : null;
+  const leavingCustomer = leaving ? getCustomer(leaving.order.customerId) : null;
+  const displayName = app?.name ?? customer.name;
+  const displaySpecies = app?.species ?? customer.species;
+
   return (
-    <div className={`counter ${opening ? "is-opening" : ""} ${arriving ? "is-arriving" : ""}`}>
-      <NightBackdrop />
-      <Shutters mode={opening ? "opening" : "open"} />
-      <div className="counter-stage">
-        {leaving && (
-          <div className="customer customer--leaving" key={`leave-${leaving.key}`} aria-hidden="true">
-            <CustomerSprite customer={leaving.customer} mood={leaving.mood} />
-          </div>
+    <div
+      ref={boxRef}
+      className={`counter counter--scene ${opening ? "is-opening" : ""} ${arriving ? "is-arriving" : ""} ${layout.narrow ? "is-narrow" : ""}`}
+      style={{ "--scene-s": layout.s.toFixed(4) } as CSSProperties}
+    >
+      <ShopScene layout={layout} shutterMode={opening ? "opening" : "open"}>
+        {leaving && leavingApp && leavingCustomer && (
+          <SceneNpc
+            key={`leave-${leaving.key}`}
+            app={leavingApp}
+            species={leavingCustomer.artKey}
+            layout={layout}
+            mood={leaving.mood}
+            className="npc--leaving"
+            reserveTop={reserveTop}
+            label={`${leavingApp.species} ${leavingApp.name}`}
+          />
         )}
-        <div className="customer customer--here" key={order.id} data-testid="customer" data-mood={mood}>
-          {/* 반응 연출은 안쪽에만: 바깥(등장 연출)을 건드리지 않아 반응이 끝나도 등장이 다시 재생되지 않는다 */}
-          <div className={`customer-body ${celebrating && order.status === "paid" ? `react-${mood}` : ""}`}>
-            <CustomerSprite customer={customer} mood={mood} />
-          </div>
-        </div>
-        <div className="speech-stack" key={`speech-${order.id}`}>
+        {app && (
+          <SceneNpc
+            key={order.id}
+            app={app}
+            species={customer.artKey}
+            layout={layout}
+            mood={mood}
+            className="npc--here"
+            reserveTop={reserveTop}
+            react={celebrating && order.status === "paid" ? `react-${mood}` : ""}
+            label={`${app.species} ${app.name}`}
+            testId="customer"
+          />
+        )}
+      </ShopScene>
+      <div className="counter-stage" style={{ height: layout.tableY }}>
+        <div ref={speechRef} className={`speech-stack ${speech.side ? "is-side" : "is-top"}`} key={`speech-${order.id}`} style={speech.style} data-testid="speech-stack">
           <div className="speech" role="status" aria-live="polite" data-testid="speech">
             <div className="speech-name">
-              <span className="name-tag">{customer.name}</span> {customer.species}
+              <span className="name-tag" data-testid="npc-name">{displayName}</span> {displaySpecies}
             </div>
             {lines.map((line, i) => (
               <p key={i} className={i === lines.length - 1 ? "speech-main" : ""}>{line}</p>
@@ -131,7 +189,8 @@ export function CounterScene({
         </div>
       </div>
 
-      <div className="counter-top" style={{ backgroundImage: `url("${assetUrl(SHOP_ART.counterTop)}")` }}>
+      <div className="counter-base" style={{ height: layout.counterH }} data-testid="counter-base">
+        <div className="counter-top" ref={contentRef}>
         <div className="order-ticket" aria-label="주문서">
           <div className="ticket-title">
             손님 {day.currentIndex + 1} / {day.orders.length} · 주문서 #{order.id.replace("order-", "")}
@@ -199,6 +258,7 @@ export function CounterScene({
               )}
             </>
           )}
+        </div>
         </div>
       </div>
 

@@ -10,6 +10,7 @@
  * 문제를 만들려고 레시피 기본량을 바꾸지 않는다. 출제 후보는 '현재 소개된 유형' 안에서
  * 미리 목록으로 만든 뒤 덱에서 뽑으므로 무한 재시도가 없다.
  */
+import { pickAppearance } from "../data/appearances.ts";
 import { CUSTOMER_IDS, fillLine, getCustomer } from "../data/customers.ts";
 import {
   CUSTOM_EASY, CUSTOM_LESS_NOTE, CUSTOM_MORE_NOTE, CUSTOM_ORIGINAL_LESS, CUSTOM_ORIGINAL_MORE,
@@ -456,6 +457,7 @@ export function planDay(input: DayPlanInput): DayPlanResult {
   const orders: Order[] = [];
   let n = input.nextOrderNumber;
   let lastBottles = bottlesOfKey(decks.multiBottle?.lastDrawn ?? null);
+  let lastAppearance: string | null = null;
   for (let i = 0; i < ordered.length; i++) {
     const slot = ordered[i];
     let key: string;
@@ -480,6 +482,10 @@ export function planDay(input: DayPlanInput): DayPlanResult {
 
     const customerId = CUSTOMER_IDS[randomInt(rng, CUSTOMER_IDS.length)];
     let order = createOrderFromKey(key, { orderNumber: n, customerId, rng });
+    // 외형은 문제 난수와 따로, 주문 번호로 정한다. 바로 앞 손님과 같은 외형은 피한다
+    const appearanceId = pickAppearance(customerId, n, lastAppearance);
+    if (appearanceId) order = { ...order, appearanceId };
+    lastAppearance = appearanceId ?? null;
     if (slot.reviewOf) {
       const rc = slot.reviewOf;
       // 같은 유형이면서 원래와 다른 인수인 과제 1개에 복습 표시

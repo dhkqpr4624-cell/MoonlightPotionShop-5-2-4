@@ -1,6 +1,8 @@
 /**
- * 창구 덧문 (임시 그래픽, 교체 가능).
- * NightBackdrop과 같은 좌표계(1000 × 560, slice)로 겹쳐 그려 창틀에 정확히 맞는다.
+ * 창구 덧문 (Phase 4 그래픽 그대로).
+ * 덧문 두 짝은 원래 좌표(x150~850, y60~560)에 그대로 그리고, 보이는 범위(viewBox)만
+ * 새 창구 PNG의 창 개구부 상자(data/shopArt.ts COUNTER_SCENE.opening)에 맞춘다.
+ * 아치 PNG가 덧문 앞에 겹쳐 창틀 역할을 하므로, 예전의 아치 모양 잘라내기와 창틀 다시 그리기는 쓰지 않는다.
  *
  * mode
  *  - "open"    : 열림(그리지 않음)
@@ -17,7 +19,8 @@ import { Icon } from "../Icon.tsx";
 export type ShutterMode = "open" | "closed" | "closing" | "opening";
 
 const LINE = "#2b1d3a";
-const WINDOW_PATH = "M150 560 L150 170 C 150 70, 850 70, 850 170 L850 560 Z";
+/** 덧문 두 짝이 함께 차지하는 범위 (Panel 좌표) */
+const PANELS_VIEWBOX = "150 60 700 500";
 
 function Panel({ x, image }: { x: number; image?: string }) {
   if (image) {
@@ -64,29 +67,18 @@ export function Shutters({ mode }: { mode: ShutterMode }) {
   return (
     <svg
       className={`shutters shutters--${mode}`}
-      viewBox="0 0 1000 560"
+      viewBox={PANELS_VIEWBOX}
       preserveAspectRatio="xMidYMid slice"
       aria-hidden="true"
       data-testid="shutters"
       data-mode={mode}
     >
-      <defs>
-        <clipPath id="shop-window">
-          <path d={WINDOW_PATH} />
-        </clipPath>
-      </defs>
-      <g clipPath="url(#shop-window)">
-        <g className="shutter-l">
-          <Panel x={150} image={SHOP_ART.shutterLeft} />
-        </g>
-        <g className="shutter-r">
-          <Panel x={500} image={SHOP_ART.shutterRight} />
-        </g>
+      <g className="shutter-l">
+        <Panel x={150} image={SHOP_ART.shutterLeft} />
       </g>
-      {/* 창틀을 다시 그려 덧문이 창틀 안쪽에 있도록 (counter-room.svg 와 같은 모양) */}
-      <path d="M150 560 L150 170 C 150 70, 850 70, 850 170 L850 560" fill="none" stroke="#3d2518" strokeWidth={40} />
-      <path d="M150 560 L150 170 C 150 70, 850 70, 850 170 L850 560" fill="none" stroke="#7a4e35" strokeWidth={30} />
-      <path d="M164 560 L164 172 C 164 84, 836 84, 836 172 L836 560" fill="none" stroke={LINE} strokeWidth={3} />
+      <g className="shutter-r">
+        <Panel x={500} image={SHOP_ART.shutterRight} />
+      </g>
     </svg>
   );
 }

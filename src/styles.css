@@ -270,6 +270,39 @@ button, input { font: inherit; color: inherit; touch-action: manipulation; }
 .result-cheer p { margin: 2px 0; }
 .result-actions { display: flex; justify-content: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
 
+/* ---------- PNG 창구 장면 (art/ShopScene.tsx) ----------
+   뒤 → 앞: 마을길(0) → 손님(1) → 덧문(2) → 아치(3) → 테이블(4) → 대사창·카운터 UI(5~6) */
+.counter--scene, .closing--scene { background: #2b1a10; }
+.shop-scene { position: absolute; z-index: 0; overflow: hidden; pointer-events: none; user-select: none; }
+.shop-scene-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.scene-layer { position: absolute; left: 0; top: 0; width: 1672px; height: 941px; display: block; -webkit-user-drag: none; }
+.scene-village { z-index: 0; }
+.scene-npcs { position: absolute; inset: 0; z-index: 1; }
+.scene-opening { position: absolute; z-index: 2; overflow: hidden; }
+.scene-opening .shutters { position: absolute; inset: 0; width: 100%; height: 100%; z-index: auto; }
+.scene-arch { z-index: 3; }
+.scene-table { z-index: 4; }
+.npc { position: absolute; }
+.npc-body { position: relative; width: 100%; height: 100%; }
+.npc-img { display: block; width: 100%; height: 100%; -webkit-user-drag: none; transform-origin: 50% 90%; animation: npc-breathe 4.2s ease-in-out infinite; }
+/* 호흡: 그림 전체를 같은 비율로 아주 조금만 (찌그러뜨리지 않음) */
+@keyframes npc-breathe { 50% { transform: translateY(-2px) scale(1.005); } }
+.npc-fallback { position: absolute; left: 22%; width: 56%; }
+.npc-fallback svg { width: 100%; height: auto; display: block; }
+.npc--here { animation: npc-enter 0.6s ease-out both; }
+.counter.is-arriving .npc--here { animation-delay: 0.45s; }
+.counter.is-opening .npc--here { animation: npc-enter 0.6s ease-out 0.9s both; }
+.npc--leaving { animation: npc-leave 0.7s ease-in forwards; }
+.npc--closing-leave { animation: customer-leave 0.6s ease-in forwards; }
+.npc-body.react-happy { animation: hop 0.6s ease-out; }
+.npc-body.react-meh { animation: nod 0.8s ease-in-out; transform-origin: 50% 90%; }
+.npc-body.react-sad { animation: sink 0.9s ease-in-out; }
+.counter--scene .counter-stage { position: relative; z-index: auto; flex: none; display: block; padding: 0; min-height: 0; }
+.counter--scene .speech-stack { position: absolute; z-index: 6; max-width: none; align-self: auto; }
+.counter--scene .speech-stack.is-top .speech::before, .counter--scene .speech-stack.is-top .speech::after { display: none; }
+.counter-base { position: relative; z-index: 5; flex: none; display: flex; flex-direction: column; justify-content: center; }
+.counter-base .counter-top { background: none; min-height: 0; z-index: auto; }
+
 /* ---------- 제조대 ---------- */
 .bench {
   flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 10px; min-width: 0;

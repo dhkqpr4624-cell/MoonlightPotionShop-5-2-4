@@ -87,6 +87,12 @@ npm run dev        # 개발 서버 실행 → 터미널에 나온 주소(보통 
 4. `main`에 올리면 Actions가 자동으로 다시 배포합니다.
 5. 학생들이 쓰던 3단계 저장은 그대로 이어집니다(저장 형식 변경 없음). 2단계·1단계 저장도 처음 열 때 자동으로 옮겨집니다(아래 ‘이전 저장 옮기기’).
 
+### PNG 창구·손님 적용판으로 업데이트하기 (`Moonlight-Potion-Shop-phase4-png.zip`)
+
+1. ZIP 안쪽 내용을 저장소 루트에 덮어써서 올립니다. 새 폴더 `public/assets/npc/`(손님 PNG 15장)와 `public/assets/shop/counter/`(창구 PNG 3장)도 함께 올립니다.
+2. **직접 지울 파일: `src/components/art/NightBackdrop.tsx`** (예전 SVG 창구 배경. 더 이상 쓰지 않음. 남아 있어도 빌드는 됩니다)
+3. workflow·Pages 설정은 그대로 둡니다. 자세한 변경 목록은 `docs/PNG_COUNTER_REPORT.md`에 있습니다.
+
 ### 배포 방식 설명 (저장소 이름과 base 경로)
 
 GitHub Pages 사이트는 `/<저장소이름>/` 하위 경로에서 열립니다. workflow가 저장소 이름을 읽어
@@ -272,16 +278,17 @@ docs/                           설계, 2·3·4단계 보고서
 
 ### 그림 교체하기
 
-4단계 그림은 모두 **직접 작성한 SVG 코드**(벡터 도형)입니다. AI 생성 이미지나 외부 이미지는 쓰지 않았고, 외부 주소에서 불러오는 그림도 없습니다. 그림과 게임 규칙 코드는 분리되어 있어 그림만 바꿔도 게임 동작은 그대로입니다.
+손님 응대 창구와 손님은 **선생님이 주신 PNG**를 그대로 씁니다(덧그리거나 다시 그리지 않음). 제조대·덧문·포션·아이콘은 4단계 SVG 그대로입니다. 외부 주소에서 불러오는 그림은 없습니다. 그림과 게임 규칙 코드는 분리되어 있어 그림만 바꿔도 게임 동작은 그대로입니다.
 
 | 바꿀 것 | 위치 | 방법 |
 |---|---|---|
-| 창구 배경(벽·아치 창·밤하늘·마을·선반·등불) | `public/assets/shop/counter-room.svg` | 같은 이름으로 덮어쓰거나, 다른 파일을 넣고 `src/data/shopArt.ts`의 `counterRoom` 경로를 바꿈. 가로:세로 1000:560 권장(화면에 꽉 차게 잘려 보임) |
-| 나무 카운터 | `public/assets/shop/counter-top.svg` (`counterTop`) | 1000:160, 가로로 늘어남 |
+| 창구 PNG 3장 (창밖 마을길 / 아치·선반·바닥 / 테이블) | `public/assets/shop/counter/village.png`, `arch.png`, `table.png`, 설정은 `src/data/shopArt.ts`의 `COUNTER_SCENE` | 세 장은 같은 캔버스(1672×941)여야 합니다. 그림을 바꾸면 아치의 투명 개구부 상자(`opening`)와 테이블 윗면 높이(`tableTop`)만 다시 재서 적습니다. 그림은 늘리지 않고 화면에 맞춰 같은 비율로 키우며, 바깥쪽만 잘립니다 |
+| 손님 PNG 15장 | `public/assets/npc/<외형 ID>.png`, 설정은 `src/data/appearances.ts` | 외형마다 크기(`scale`)·카운터에 닿는 높이(`cutY`)·몸 중심(`centerX`)·귀 끝(`top`)·얼굴 높이(`headY`)를 따로 적습니다. 새 손님을 추가하려면 PNG를 넣고 목록에 한 줄을 더하면 됩니다(손님 ID는 fox·rabbit·cat·wolf 중 하나). 표시 이름도 여기서 바꿉니다 |
+| 타이틀 화면 배경 | `public/assets/shop/counter-room.svg` (`counterRoom`) | 4단계 SVG 그대로 |
 | 포션 받침 | `public/assets/shop/tray.svg` (`tray`) | 240:60 |
 | 제조대 배경(돌벽·둥근 창·선반) | `public/assets/shop/workbench-room.svg` (`workbench`) | 800:600 |
 | 덧문·영업 종료 팻말 | `src/data/shopArt.ts`의 `shutterLeft`, `shutterRight`, `closedSign` | 그림 경로를 적으면 코드 그림 대신 사용. 덧문 한 짝은 350:500 비율 |
-| 손님 4종(여우·토끼·고양이·늑대) | `src/components/art/AnimalArt.tsx` | 코드 그림. 그림 파일을 쓰려면 `public/assets/customers/fox.png`처럼 넣고 `src/data/customers.ts`의 손님에 `image: "assets/customers/fox.png"` 추가(못 읽으면 자동으로 코드 그림). 손님 ID는 바꾸지 마세요 |
+| 손님 대체 그림 | `src/components/art/AnimalArt.tsx` | 손님 PNG를 못 읽을 때만 보이는 4단계 코드 그림 |
 | 포션 병 4종·재료 그릇·솥·젓는 막대 | `src/components/art/PotionArt.tsx`, 포션 색·병 모양·문양은 `src/data/recipes.ts`의 `look` | 솥 액체 위치(`LIQUID`)를 바꾸면 젓기 손 위치 계산도 함께 바뀝니다 |
 | 버튼 아이콘 | `src/components/Icon.tsx` | 선 아이콘(SVG). 이모지는 쓰지 않습니다 |
 | 효과음 | `src/audio/sfx.ts`의 `playSfx` | 지금은 음원 파일 없이 합성. 직접 만든 짧은 음원 파일로 바꾸려면 `public/assets/sfx/`에 넣고 `assetUrl()` 경로로 재생하도록 이 파일만 고치면 됩니다 |
@@ -290,7 +297,8 @@ docs/                           설계, 2·3·4단계 보고서
 
 ## 현재 제한 사항 (다음 단계 예정)
 
-- 그림은 코드로 그린 SVG입니다. 손으로 그린 일러스트·전문 원화로 바꾸려면 위 ‘그림 교체하기’를 보세요.
+- 창구와 손님은 PNG입니다. 손님은 그림 한 장이라 표정이 바뀌지 않고, 만족·아쉬움·불만족은 대사와 간단한 움직임으로 구분합니다.
+- 제조대·타이틀은 4단계 SVG 그대로입니다.
 - 효과음은 합성음이라 단순합니다. 배경음악은 없습니다.
 - 재료는 달빛 이슬·별가루 2종, 포션 4종입니다. 도감·성장·가구 구매·가게 꾸미기는 아직 없습니다.
 - 학습 기록은 이 브라우저에만 저장됩니다. 다른 기기로 옮기려면 ‘저장 데이터 내보내기·가져오기’를 쓰세요.

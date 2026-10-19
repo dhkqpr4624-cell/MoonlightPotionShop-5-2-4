@@ -126,6 +126,8 @@ export interface Order {
   kind: OrderKind;
   rules: RuleVersion;
   customerId: string;
+  /** 손님 외형(그림) ID. 주문을 만들 때 정해 저장한다. 없으면 손님 ID별 기본 외형 (data/appearances.ts) */
+  appearanceId?: string;
   recipeId: string;
   /** 여러 병 주문의 병 수. 그 밖의 주문은 1 (제조 1건) */
   bottles: number;

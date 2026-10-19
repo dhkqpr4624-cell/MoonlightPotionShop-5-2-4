@@ -1,16 +1,16 @@
 /**
- * 영업 마감 화면. 배경은 덧문이 닫힌 가게, 실내 등불은 켜진 채로 둔다.
+ * 영업 마감 화면. 배경은 창구와 같은 PNG 가게에 기존 덧문이 닫힌 모습.
  * animate=true 이면 (방금 '영업 마감'을 눌렀을 때) 손님 퇴장 → 덧문 닫힘 → 표지판 → 결과 순서로 보여 준다.
  * 새로고침·이어하기로 들어오면 연출 없이 닫힌 모습과 결과를 바로 보여 준다.
  */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { encouragement, summarizeDay } from "../game/daySummary.ts";
 import type { DayState, GameState } from "../game/types.ts";
-import { NightBackdrop } from "./art/NightBackdrop.tsx";
-import { ClosedSign, Shutters } from "./art/Shutters.tsx";
-import { AnimalArt } from "./art/AnimalArt.tsx";
+import { ClosedSign } from "./art/Shutters.tsx";
+import { SceneNpc, ShopScene, useSceneLayout } from "./art/ShopScene.tsx";
 import { Icon } from "./Icon.tsx";
 import { getCustomer } from "../data/customers.ts";
+import { appearanceOf } from "../data/appearances.ts";
 
 export const CLOSE_ANIM_MS = 1700;
 
@@ -29,6 +29,8 @@ export function ClosingScene({
   onTitle: () => void;
   busy: boolean;
 }) {
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const layout = useSceneLayout(boxRef);
   const day = state.day as DayState;
   const summary =
     state.dayHistory.find((h) => h.dayNumber === day.dayNumber) ?? summarizeDay(day, state.money, new Date().toISOString());
@@ -72,15 +74,22 @@ export function ClosingScene({
     extra.push(`손님 지정량 계량 ${summary.specifiedTasks}개 중 ${summary.specifiedCorrect ?? 0}개 정확 (계산 문제 수에는 넣지 않아요)`);
   }
 
+  const lastOrder = day.orders[day.orders.length - 1];
+  const lastApp = lastOrder ? appearanceOf(lastOrder) : null;
   return (
-    <div className="closing" data-testid="closing">
-      <NightBackdrop dim />
-      {animate && (
-        <div className="closing-leaving-customer" aria-hidden="true">
-          <AnimalArt species={getCustomer(day.orders[day.orders.length - 1].customerId).artKey} mood="happy" />
-        </div>
-      )}
-      <Shutters mode={animate ? "closing" : "closed"} />
+    <div className="closing closing--scene" data-testid="closing" ref={boxRef}>
+      <ShopScene layout={layout} shutterMode={animate ? "closing" : "closed"}>
+        {animate && lastOrder && lastApp && (
+          <SceneNpc
+            app={lastApp}
+            species={getCustomer(lastOrder.customerId).artKey}
+            layout={layout}
+            mood="happy"
+            className="npc--closing-leave"
+            label={`${lastApp.species} ${lastApp.name}`}
+          />
+        )}
+      </ShopScene>
       <ClosedSign animate={animate} />
       <div className="closing-dim" aria-hidden="true" />
 

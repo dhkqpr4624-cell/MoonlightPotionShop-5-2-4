@@ -155,6 +155,7 @@ test("그림 파일: shopArt가 가리키는 파일이 public/에 있고 외부 
     assert.ok(existsSync(`public/${path}`), `public/${path}`);
   }
   for (const f of readdirSync("public/assets/shop")) {
+    if (!f.endsWith(".svg")) continue; // counter/ 폴더(PNG 창구)는 아래 PNG 검사에서
     const svg = readFileSync(`public/assets/shop/${f}`, "utf8");
     assert.ok(!/(href|src)=["']https?:/.test(svg.replace(/xmlns(:\w+)?="[^"]+"/g, "")), `${f}에 외부 주소`);
   }

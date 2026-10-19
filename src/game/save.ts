@@ -5,6 +5,7 @@
  * - 버전 1(Phase 1) → 2 → 3, 버전 2(Phase 2) → 3 으로 자동으로 옮긴다. 옮기기 전 원본은 백업 키에 보관.
  * - 손상되었거나 규칙·참조가 맞지 않거나 더 새로운 버전인 저장은 덮어쓰지 않고 오류로 돌려준다.
  */
+import { isAppearanceOf } from "../data/appearances.ts";
 import { CUSTOMERS, fillLine } from "../data/customers.ts";
 import { MULTI_EASY } from "../data/dialogues.ts";
 import { classifyProduct, LEARNING_TYPE_IDS, LEARNING_TYPES, MAX_INTRO_STAGE } from "../data/learningTypes.ts";
@@ -148,6 +149,9 @@ export function validateOrder(o: unknown, where: string): string[] {
   const recipe = isStr(o.recipeId) ? RECIPES[o.recipeId] : undefined;
   if (!recipe) e.push(`${where}: 알 수 없는 레시피(${String(o.recipeId)})입니다.`);
   if (!isStr(o.customerId) || !CUSTOMERS[o.customerId]) e.push(`${where}: 알 수 없는 손님(${String(o.customerId)})입니다.`);
+  if (o.appearanceId !== undefined && !(isStr(o.customerId) && isAppearanceOf(o.appearanceId, o.customerId))) {
+    e.push(`${where}: 손님 외형(${String(o.appearanceId)})이 올바르지 않습니다.`);
+  }
   if (!isInt(o.stirProgress, 0, STIR_TARGET) || !isInt(o.askCount, 0)) e.push(`${where}: 젓기·대화 기록이 올바르지 않습니다.`);
   const sc = o.script;
   if (!isObject(sc) || !["greet", "original", "easy", "waiting"].every((k) => isStr(sc[k])) || !isStrArray(sc.memo) || !(sc.reaction === null || isStr(sc.reaction))) {
