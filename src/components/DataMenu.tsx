@@ -119,7 +119,7 @@ export function DataMenu({
                 </tr>
               </tbody>
             </table>
-            {pending.migratedFrom !== null && <p className="small">Phase {pending.migratedFrom} 저장 파일이라 새 형식으로 옮겨서 가져와요.</p>}
+            {pending.migratedFrom !== null && <p className="small">이전 버전({pending.migratedFrom <= 2 ? `Phase ${pending.migratedFrom}` : `저장 버전 ${pending.migratedFrom}`}) 저장 파일이라 새 형식으로 옮겨서 가져와요.</p>}
             <p>
               <strong>지금 저장은 가져온 파일로 바뀌어요.</strong> 필요하면 먼저 ‘저장 데이터 내보내기’로 보관해 두세요.
             </p>

@@ -1,15 +1,15 @@
 /**
  * 계량 패널. 재료를 솥에 놓으면 열린다.
- *  - 문제: 질문 + 입력칸·단위 + 키패드 (계산식·정답은 보이지 않음, 힌트를 누르면 단계별로)
+ *  - 문제: 질문 + 입력칸·단위 + 키패드 (계산식·정답은 보이지 않음. 식이 궁금하면 제작대 주문서의 '힌트')
  *  - 결과: 같은 자리에서 해설로 바뀐다. 오답이면 입력한 양(빨강)과 필요한 양을 글로 구분하고 계산 과정을 보여 준다.
  *  - '이 양으로 투입하기'를 눌러야 투입된다 (자동 투입 없음)
  */
 import { useEffect, useRef, useState, type Dispatch } from "react";
 import { getIngredient } from "../data/ingredients.ts";
 import { LEARNING_TYPES } from "../data/learningTypes.ts";
-import { CHOICE_LABEL, hintCard, resultSummary, solutionSteps } from "../game/explain.ts";
-import { MAX_HINT_LEVEL, type Action } from "../game/reducer.ts";
-import type { Feedback, HintVisual, IngredientTask, Order, ShiftChoice } from "../game/types.ts";
+import { CHOICE_LABEL, resultSummary, solutionSteps } from "../game/explain.ts";
+import type { Action } from "../game/reducer.ts";
+import type { Feedback, IngredientTask, Order, ShiftChoice } from "../game/types.ts";
 import { josa } from "../lib/josa.ts";
 import { Keypad } from "./Keypad.tsx";
 import { IngredientArt } from "./art/PotionArt.tsx";
@@ -102,39 +102,12 @@ export function MeasurePanel({
       )}
 
       {pending && (
-        <>
-          <div className="hint-row">
-            <button
-              type="button"
-              className="btn btn-hint"
-              onClick={(e: { currentTarget: HTMLButtonElement }) => {
-                dispatch({ type: "REQUEST_HINT" });
-                e.currentTarget.blur(); // Enter 키가 다시 힌트를 누르지 않고 '제출하기'가 되도록
-              }}
-              disabled={locked || task.hintLevel >= MAX_HINT_LEVEL}
-              data-testid="hint"
-            >
-              <Icon name="bulb" size={18} /> 힌트 {task.hintLevel < MAX_HINT_LEVEL ? `${task.hintLevel + 1}단계 보기` : "모두 봤어요"}
-            </button>
-            <button type="button" className="btn btn-quiet" onClick={() => dispatch({ type: "CANCEL_MEASURE", orderId: order.id })} disabled={locked} data-testid="cancel-measure">
-              선반으로 되돌리기
-            </button>
-          </div>
-          {task.hintLevel > 0 && (
-            <div className="hints" aria-label="힌트">
-              {Array.from({ length: task.hintLevel }, (_, i) => {
-                const h = hintCard(order, task, i + 1);
-                return (
-                  <div key={i} className="hint-card" data-testid={`hint-${i + 1}`}>
-                    <strong>{h.title}</strong>
-                    {h.lines.map((line, j) => <p key={j}>{line}</p>)}
-                    {h.visual && <UnitBlocks visual={h.visual} />}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </>
+        <div className="hint-row">
+          <span className="muted small">식이 궁금하면 주문서의 ‘힌트’를 눌러 보세요.</span>
+          <button type="button" className="btn btn-quiet" onClick={() => dispatch({ type: "CANCEL_MEASURE", orderId: order.id })} disabled={locked} data-testid="cancel-measure">
+            서랍으로 되돌리기
+          </button>
+        </div>
       )}
     </div>
   );
@@ -237,22 +210,6 @@ function FeedbackBox({ feedback }: { feedback: Feedback }) {
     <div className={`feedback feedback-${feedback.kind}`} role={feedback.kind === "wrong" ? "alert" : "status"} data-testid="feedback" data-kind={feedback.kind}>
       <strong>{feedback.title}</strong>
       {feedback.lines.map((line, i) => <p key={i}>{line}</p>)}
-    </div>
-  );
-}
-
-function UnitBlocks({ visual }: { visual: HintVisual }) {
-  return (
-    <div className="unit-blocks" aria-label={`${visual.unitLabel} 블록 ${visual.perGroup}개씩 ${visual.groups}묶음`}>
-      {Array.from({ length: visual.groups }, (_, g) => (
-        <div key={g} className="unit-group">
-          <span className="unit-group-label">{g + 1}묶음</span>
-          <span className="unit-cells">
-            {Array.from({ length: visual.perGroup }, (_, c) => <i key={c} />)}
-          </span>
-        </div>
-      ))}
-      <div className="muted small">■ 한 칸 = {visual.unitLabel}</div>
     </div>
   );
 }

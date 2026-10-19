@@ -66,10 +66,11 @@ export function serveCurrent(state: GameState, opts: ServeOptions = {}): GameSta
   if (!s.day!.introSeen) s = reducer(s, { type: "ACK_INTRO", dayNumber: s.day!.dayNumber });
   if (order(s).status === "arrived") s = reducer(s, { type: "ACCEPT_ORDER", orderId: order(s).id });
   const o = order(s);
+  // 주문서 팝업의 '힌트' (이 주문의 아직 풀지 않은 과제 식 공개)
+  if (opts.hint) s = reducer(s, { type: "REVEAL_HINT", orderId: o.id });
   for (let i = 0; i < o.tasks.length; i++) {
     if (order(s).tasks[i].status === "done") continue;
     if (s.activeTask === null) s = reducer(s, { type: "PLACE_INGREDIENT", orderId: o.id, taskIndex: i });
-    if (opts.hint) s = reducer(s, { type: "REQUEST_HINT" });
     const t = order(s).tasks[i];
     if (o.rules === 2) {
       if (opts.legacyWrongFirst) s = submit(s, "99");

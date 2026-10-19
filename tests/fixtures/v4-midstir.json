@@ -1,0 +1,575 @@
+{
+ "saveVersion": 4,
+ "scene": "workbench",
+ "money": 27,
+ "nextOrderNumber": 6,
+ "day": {
+  "dayNumber": 1,
+  "status": "open",
+  "rules": 3,
+  "introStage": 0,
+  "newTypes": [
+   "d1xN",
+   "d2xN"
+  ],
+  "introSeen": true,
+  "orders": [
+   {
+    "id": "order-1",
+    "rules": 3,
+    "customerId": "wolf",
+    "status": "paid",
+    "quality": "great",
+    "reward": 15,
+    "stirProgress": 100,
+    "askCount": 0,
+    "deckKey": "multiBottle:energy:3",
+    "reviewCandidateId": null,
+    "kind": "multiBottle",
+    "recipeId": "energy",
+    "bottles": 3,
+    "multiplier": null,
+    "life": null,
+    "tasks": [
+     {
+      "problemId": "order-1:energyHerb",
+      "ingredientId": "energyHerb",
+      "mode": "calc",
+      "problem": {
+       "a": "0.6",
+       "b": "3",
+       "answer": "1.8",
+       "learningType": "d1xN",
+       "unit": "g",
+       "bMeaning": "bottles"
+      },
+      "concept": null,
+      "status": "done",
+      "submitted": "1.8",
+      "correct": true,
+      "addedAmount": "1.8",
+      "hintLevel": 0,
+      "explanationViewed": false,
+      "reviewOf": null,
+      "attempts": 1,
+      "firstAnswer": "1.8",
+      "firstCorrect": true,
+      "lastWrongAnswer": null
+     }
+    ],
+    "autoAdditions": [
+     {
+      "name": "맑은 기본 용액",
+      "amount": "90",
+      "unit": "mL",
+      "note": "1병에 30mL씩 자동으로 담아요"
+     }
+    ],
+    "price": 15,
+    "script": {
+     "greet": "멀리서 포션 냄새 맡고 왔어요!",
+     "waiting": "달을 보면서 기다릴게요.",
+     "reaction": "딱 제가 바라던 빛깔이에요. 고마워요!",
+     "original": "기력 포션 3병이요. 가방에 딱 3칸이 비어 있어요!",
+     "easy": "기력 포션을 3병 만들어 주세요. 레시피북에는 1병에 넣는 양이 적혀 있어요. 3병이니까 재료마다 '1병당 양'을 3번 모은 만큼 넣으면 돼요.",
+     "memo": [
+      "포션: 기력 포션 3병",
+      "재료: 레시피북의 1병당 양으로 3병만큼",
+      "기력초는 g으로 계량"
+     ]
+    },
+    "appearanceId": "wolf-snow"
+   },
+   {
+    "id": "order-2",
+    "rules": 3,
+    "customerId": "fox",
+    "status": "paid",
+    "quality": "poor",
+    "reward": 12,
+    "stirProgress": 100,
+    "askCount": 0,
+    "deckKey": "life:pebble:1.5:5",
+    "reviewCandidateId": null,
+    "kind": "lifeItem",
+    "recipeId": "energy",
+    "bottles": 1,
+    "multiplier": null,
+    "life": {
+     "itemId": "pebble",
+     "a": "1.5",
+     "b": "5"
+    },
+    "tasks": [
+     {
+      "problemId": "order-2:energyHerb",
+      "ingredientId": "energyHerb",
+      "mode": "calc",
+      "problem": {
+       "a": "1.5",
+       "b": "5",
+       "answer": "7.5",
+       "learningType": "d1xN",
+       "unit": "g",
+       "bMeaning": "itemCount"
+      },
+      "concept": null,
+      "status": "done",
+      "submitted": "99",
+      "correct": false,
+      "addedAmount": "99",
+      "hintLevel": 2,
+      "explanationViewed": false,
+      "reviewOf": null,
+      "attempts": 1,
+      "firstAnswer": "99",
+      "firstCorrect": false,
+      "lastWrongAnswer": null
+     }
+    ],
+    "autoAdditions": [
+     {
+      "name": "맑은 기본 용액",
+      "amount": "30",
+      "unit": "mL",
+      "note": "1병 기본 용액 30mL를 자동으로 담아요"
+     }
+    ],
+    "price": 20,
+    "script": {
+     "greet": "달빛이 참 밝은 밤이에요!",
+     "waiting": "꼬리를 흔들며 기다리는 중이에요~",
+     "reaction": "기대했던 빛깔과는 다르네요. 다음에는 더 반짝이면 좋겠어요.",
+     "original": "강가에서 주운 돌로 탑을 쌓았는데, 그 탑에 행운을 담고 싶어요. 작은 돌 1개가 1.5g이에요. 작은 돌 5개의 무게와 같은 숫자만큼 기력초를 넣어 주세요. 포션은 기력 포션 한 병이면 돼요.",
+     "easy": "작은 돌 5개의 무게를 계산해 주세요. 그 결과의 숫자를 기력초의 g 값으로 쓰면 돼요. 단위를 바꾸는 계산이 아니라, 계산한 숫자를 그대로 마법 재료량으로 쓰는 특별 주문이에요.",
+     "memo": [
+      "포션: 기력 포션 1병 (손님 지정 특별 주문)",
+      "기력초(g): 작은 돌 1개 1.5g, 5개의 무게와 같은 숫자만큼 — 손님 지정이 레시피보다 우선",
+      "특별 주문 규칙: 계산한 숫자만 재료량으로 써요. 단위를 바꾸는 계산이 아니에요."
+     ]
+    },
+    "appearanceId": "fox-herbalist"
+   },
+   {
+    "id": "order-3",
+    "rules": 3,
+    "customerId": "fox",
+    "status": "brewing",
+    "quality": null,
+    "reward": null,
+    "stirProgress": 40,
+    "askCount": 0,
+    "deckKey": "multiBottle:energy:8",
+    "reviewCandidateId": null,
+    "kind": "multiBottle",
+    "recipeId": "energy",
+    "bottles": 8,
+    "multiplier": null,
+    "life": null,
+    "tasks": [
+     {
+      "problemId": "order-3:energyHerb",
+      "ingredientId": "energyHerb",
+      "mode": "calc",
+      "problem": {
+       "a": "0.6",
+       "b": "8",
+       "answer": "4.8",
+       "learningType": "d1xN",
+       "unit": "g",
+       "bMeaning": "bottles"
+      },
+      "concept": null,
+      "status": "done",
+      "submitted": "4.8",
+      "correct": true,
+      "addedAmount": "4.8",
+      "hintLevel": 0,
+      "explanationViewed": false,
+      "reviewOf": null,
+      "attempts": 1,
+      "firstAnswer": "4.8",
+      "firstCorrect": true,
+      "lastWrongAnswer": null
+     }
+    ],
+    "autoAdditions": [
+     {
+      "name": "맑은 기본 용액",
+      "amount": "240",
+      "unit": "mL",
+      "note": "1병에 30mL씩 자동으로 담아요"
+     }
+    ],
+    "price": 40,
+    "script": {
+     "greet": "또 왔어요, 사장님!",
+     "waiting": "천천히 만들어 주세요. 기다릴게요!",
+     "reaction": null,
+     "original": "기력 포션 8병이요. 가방에 딱 8칸이 비어 있어요!",
+     "easy": "기력 포션을 8병 만들어 주세요. 레시피북에는 1병에 넣는 양이 적혀 있어요. 8병이니까 재료마다 '1병당 양'을 8번 모은 만큼 넣으면 돼요.",
+     "memo": [
+      "포션: 기력 포션 8병",
+      "재료: 레시피북의 1병당 양으로 8병만큼",
+      "기력초는 g으로 계량"
+     ]
+    },
+    "appearanceId": "fox-traveler"
+   },
+   {
+    "id": "order-4",
+    "rules": 3,
+    "customerId": "wolf",
+    "status": "queued",
+    "quality": null,
+    "reward": null,
+    "stirProgress": 0,
+    "askCount": 0,
+    "deckKey": "amount:energy:perBottle:0.45:6",
+    "reviewCandidateId": null,
+    "kind": "customAmount",
+    "recipeId": "energy",
+    "bottles": 6,
+    "multiplier": null,
+    "life": null,
+    "given": {
+     "form": "perBottle",
+     "amount": "0.45",
+     "times": "6"
+    },
+    "tasks": [
+     {
+      "problemId": "order-4:energyHerb",
+      "ingredientId": "energyHerb",
+      "mode": "calc",
+      "problem": {
+       "a": "0.45",
+       "b": "6",
+       "answer": "2.7",
+       "learningType": "d2xN",
+       "unit": "g",
+       "bMeaning": "bottles"
+      },
+      "concept": null,
+      "status": "pending",
+      "submitted": null,
+      "correct": null,
+      "addedAmount": null,
+      "hintLevel": 0,
+      "explanationViewed": false,
+      "reviewOf": null,
+      "attempts": 0,
+      "firstAnswer": null,
+      "firstCorrect": null,
+      "lastWrongAnswer": null
+     }
+    ],
+    "autoAdditions": [
+     {
+      "name": "맑은 기본 용액",
+      "amount": "180",
+      "unit": "mL",
+      "note": "1병에 30mL씩 자동으로 담아요"
+     }
+    ],
+    "price": 30,
+    "script": {
+     "greet": "숲 지킴이 달이예요. 부탁이 있어요.",
+     "waiting": "꼬리 털 손질하면서 기다릴게요.",
+     "reaction": null,
+     "original": "기력 포션 6병이요. 할머니 쪽지에 '1병에 기력초 0.45g씩'이라고 적혀 있어요. 그대로 부탁해요!",
+     "easy": "이번 주문은 레시피북의 양 대신 손님이 정한 양을 써요. 1병에 기력초 0.45g씩, 6병이에요. 0.45g을 6번 모은 만큼 넣으면 돼요. 기본 용액은 자동으로 맞춰져요.",
+     "memo": [
+      "포션: 기력 포션 6병 (손님 지정량 주문)",
+      "기력초(g): 손님이 정한 1병당 0.45g씩 6병만큼 — 손님 지정이 레시피보다 우선",
+      "기본 용액은 1병에 30mL씩 자동"
+     ]
+    },
+    "appearanceId": "wolf-iceblue"
+   },
+   {
+    "id": "order-5",
+    "rules": 3,
+    "customerId": "cat",
+    "status": "queued",
+    "quality": null,
+    "reward": null,
+    "stirProgress": 0,
+    "askCount": 0,
+    "deckKey": "amount:energy:perBottle:0.45:5",
+    "reviewCandidateId": null,
+    "kind": "customAmount",
+    "recipeId": "energy",
+    "bottles": 5,
+    "multiplier": null,
+    "life": null,
+    "given": {
+     "form": "perBottle",
+     "amount": "0.45",
+     "times": "5"
+    },
+    "tasks": [
+     {
+      "problemId": "order-5:energyHerb",
+      "ingredientId": "energyHerb",
+      "mode": "calc",
+      "problem": {
+       "a": "0.45",
+       "b": "5",
+       "answer": "2.25",
+       "learningType": "d2xN",
+       "unit": "g",
+       "bMeaning": "bottles"
+      },
+      "concept": null,
+      "status": "pending",
+      "submitted": null,
+      "correct": null,
+      "addedAmount": null,
+      "hintLevel": 0,
+      "explanationViewed": false,
+      "reviewOf": null,
+      "attempts": 0,
+      "firstAnswer": null,
+      "firstCorrect": null,
+      "lastWrongAnswer": null
+     }
+    ],
+    "autoAdditions": [
+     {
+      "name": "맑은 기본 용액",
+      "amount": "150",
+      "unit": "mL",
+      "note": "1병에 30mL씩 자동으로 담아요"
+     }
+    ],
+    "price": 25,
+    "script": {
+     "greet": "야옹, 오늘도 왔다냥.",
+     "waiting": "느긋하게 기다릴게냥~",
+     "reaction": null,
+     "original": "기력 포션 5병 주세요! 저는 기력초를 1병에 0.45g씩만 넣어야 기운이 딱 맞아요.",
+     "easy": "이번 주문은 레시피북의 양 대신 손님이 정한 양을 써요. 1병에 기력초 0.45g씩, 5병이에요. 0.45g을 5번 모은 만큼 넣으면 돼요. 기본 용액은 자동으로 맞춰져요.",
+     "memo": [
+      "포션: 기력 포션 5병 (손님 지정량 주문)",
+      "기력초(g): 손님이 정한 1병당 0.45g씩 5병만큼 — 손님 지정이 레시피보다 우선",
+      "기본 용액은 1병에 30mL씩 자동"
+     ]
+    },
+    "appearanceId": "panther-gentleman"
+   }
+  ],
+  "currentIndex": 2,
+  "moneyEarned": 27
+ },
+ "decks": {
+  "multiBottle": {
+   "remaining": [
+    "multiBottle:energy:2",
+    "multiBottle:energy:7",
+    "multiBottle:energy:9",
+    "multiBottle:energy:5",
+    "multiBottle:energy:6",
+    "multiBottle:energy:4"
+   ],
+   "lastDrawn": "multiBottle:energy:8"
+  },
+  "lifeItem": {
+   "remaining": [
+    "life:bead:0.35:4",
+    "life:chocolate:14.35:10",
+    "life:bead:0.25:7",
+    "life:bead:0.45:3",
+    "life:pencil:1.4:5",
+    "life:bead:0.15:6",
+    "life:pencil:0.6:8",
+    "life:pebble:1.6:4",
+    "life:bead:1.25:2",
+    "life:pencil:2.5:3",
+    "life:pencil:0.75:4",
+    "life:pencil:0.65:6",
+    "life:pebble:0.8:6",
+    "life:pebble:2.4:2",
+    "life:pebble:1.2:3"
+   ],
+   "lastDrawn": "life:pebble:1.5:5"
+  },
+  "customAmount": {
+   "remaining": [
+    "amount:energy:perBottle:0.25:7",
+    "amount:energy:perBottle:0.35:6",
+    "amount:energy:perBottle:0.25:3",
+    "amount:energy:perBottle:0.25:8",
+    "amount:energy:perBottle:0.45:9",
+    "amount:energy:perBottle:0.35:3",
+    "amount:energy:perBottle:0.35:4",
+    "amount:energy:perBottle:0.15:8",
+    "amount:energy:perBottle:0.15:3",
+    "amount:energy:perBottle:0.45:7",
+    "amount:energy:perBottle:0.75:6",
+    "amount:energy:perBottle:0.35:7",
+    "amount:energy:perBottle:0.15:4",
+    "amount:energy:perBottle:0.25:5",
+    "amount:energy:perBottle:1.25:8",
+    "amount:energy:perBottle:0.15:7",
+    "amount:energy:perBottle:0.15:2",
+    "amount:energy:perBottle:1.25:3",
+    "amount:energy:perBottle:0.25:2",
+    "amount:energy:perBottle:0.75:5",
+    "amount:energy:perBottle:0.35:2",
+    "amount:energy:perBottle:1.25:9",
+    "amount:energy:perBottle:0.35:8",
+    "amount:energy:perBottle:0.35:5",
+    "amount:energy:perBottle:0.15:6",
+    "amount:energy:perBottle:0.75:8",
+    "amount:energy:perBottle:0.75:4",
+    "amount:energy:perBottle:0.25:6",
+    "amount:energy:perBottle:0.75:3",
+    "amount:energy:perBottle:0.75:9",
+    "amount:energy:perBottle:1.25:5",
+    "amount:energy:perBottle:0.35:9",
+    "amount:energy:perBottle:0.45:3",
+    "amount:energy:perBottle:0.45:8",
+    "amount:energy:perBottle:0.45:6",
+    "amount:energy:perBottle:1.25:2",
+    "amount:energy:perBottle:0.45:2",
+    "amount:energy:perBottle:0.45:4",
+    "amount:energy:perBottle:0.75:7",
+    "amount:energy:perBottle:0.15:9",
+    "amount:energy:perBottle:0.75:2",
+    "amount:energy:perBottle:0.25:9",
+    "amount:energy:perBottle:0.15:5",
+    "amount:energy:perBottle:1.25:6",
+    "amount:energy:perBottle:1.25:4",
+    "amount:energy:perBottle:0.25:4",
+    "amount:energy:perBottle:1.25:7"
+   ],
+   "lastDrawn": "amount:energy:perBottle:0.45:5"
+  }
+ },
+ "activeTask": null,
+ "draftAnswer": "",
+ "feedback": null,
+ "pour": null,
+ "problemLog": [
+  {
+   "problemId": "order-1:energyHerb",
+   "dayNumber": 1,
+   "customerNumber": 1,
+   "orderId": "order-1",
+   "orderKind": "multiBottle",
+   "mode": "calc",
+   "ingredientId": "energyHerb",
+   "learningType": "d1xN",
+   "condition": "포션: 기력 포션 3병 · 재료: 레시피북의 1병당 양으로 3병만큼",
+   "a": "0.6",
+   "b": "3",
+   "target": "1.8",
+   "submitted": "1.8",
+   "correct": true,
+   "hintLevel": 0,
+   "explanationViewed": false,
+   "isReview": false,
+   "reviewOf": null,
+   "submittedAt": "2026-10-18T10:00:00.000Z"
+  },
+  {
+   "problemId": "order-2:energyHerb",
+   "dayNumber": 1,
+   "customerNumber": 2,
+   "orderId": "order-2",
+   "orderKind": "lifeItem",
+   "mode": "calc",
+   "ingredientId": "energyHerb",
+   "learningType": "d1xN",
+   "condition": "포션: 기력 포션 1병 (손님 지정 특별 주문) · 기력초(g): 작은 돌 1개 1.5g, 5개의 무게와 같은 숫자만큼 — 손님 지정이 레시피보다 우선",
+   "a": "1.5",
+   "b": "5",
+   "target": "7.5",
+   "submitted": "99",
+   "correct": false,
+   "hintLevel": 2,
+   "explanationViewed": false,
+   "isReview": false,
+   "reviewOf": null,
+   "submittedAt": "2026-10-18T10:00:00.000Z"
+  },
+  {
+   "problemId": "order-3:energyHerb",
+   "dayNumber": 1,
+   "customerNumber": 3,
+   "orderId": "order-3",
+   "orderKind": "multiBottle",
+   "mode": "calc",
+   "ingredientId": "energyHerb",
+   "learningType": "d1xN",
+   "condition": "포션: 기력 포션 8병 · 재료: 레시피북의 1병당 양으로 8병만큼",
+   "a": "0.6",
+   "b": "8",
+   "target": "4.8",
+   "submitted": "4.8",
+   "correct": true,
+   "hintLevel": 0,
+   "explanationViewed": false,
+   "isReview": false,
+   "reviewOf": null,
+   "submittedAt": "2026-10-18T10:00:00.000Z"
+  }
+ ],
+ "legacyRecords": [],
+ "review": [
+  {
+   "id": "rev-order-2:energyHerb",
+   "sourceProblemId": "order-2:energyHerb",
+   "learningType": "d1xN",
+   "a": "1.5",
+   "b": "5",
+   "createdDay": 1,
+   "status": "open",
+   "lastReviewDay": null,
+   "reviewProblemIds": [],
+   "resolvedProblemId": null
+  }
+ ],
+ "orderLog": [
+  {
+   "orderId": "order-1",
+   "dayNumber": 1,
+   "customerNumber": 1,
+   "kind": "multiBottle",
+   "rules": 3,
+   "recipeId": "energy",
+   "bottles": 3,
+   "quality": "great",
+   "price": 15,
+   "reward": 15,
+   "deliveredAt": "2026-10-18T10:00:00.000Z"
+  },
+  {
+   "orderId": "order-2",
+   "dayNumber": 1,
+   "customerNumber": 2,
+   "kind": "lifeItem",
+   "rules": 3,
+   "recipeId": "energy",
+   "bottles": 1,
+   "quality": "poor",
+   "price": 20,
+   "reward": 12,
+   "deliveredAt": "2026-10-18T10:00:00.000Z"
+  }
+ ],
+ "dayHistory": [],
+ "stats": {
+  "ordersCompleted": 2,
+  "potionsSold": 3,
+  "problemsSolved": 3
+ },
+ "paidOrderIds": [
+  "order-1",
+  "order-2"
+ ],
+ "unlockedIngredients": [
+  "energyHerb"
+ ]
+}

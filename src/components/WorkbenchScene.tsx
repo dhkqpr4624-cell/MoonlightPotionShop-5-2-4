@@ -5,7 +5,9 @@
  *  - 배경: public/assets/shop/workbench/table.png 를 자르거나 늘리지 않고 장면 상자 안에 통째로 맞춘다(바깥은 단색 여백).
  *  - 모든 물건·클릭 영역은 PNG 픽셀 좌표(data/shopArt.ts WORKBENCH_SCENE)로 정하고, 같은 함수(rect)로 화면 좌표로 바꾼다.
  *    포인터 좌표도 같은 장면 좌표로 거꾸로 바꿔서(toCanvas) 판정하므로, 여백이 생겨도 그림과 클릭 영역이 어긋나지 않는다.
- *  - 맨 왼쪽 위 서랍: 기력초 더미 / 가운데 항아리: 물약(SVG, 항아리 안쪽 타원으로 잘라 냄)과 젓는 막대
+ *  - 위쪽 서랍: 0 기력초 / 1 깃털풀 / 2 바람 정령의 파편 (잠긴 재료는 그 칸 안쪽만 어둡게 + 자물쇠·이름·가격·잠금 해제 버튼)
+ *    해금한 재료는 주문과 상관없이 서랍에 놓인다. 이번 주문에 필요 없는 재료는 넣지 않고 짧게 안내한다(오답·감액 아님).
+ *  - 가운데 항아리: 물약(SVG, 항아리 안쪽 타원으로 잘라 냄)과 젓는 막대
  *  - 왼쪽 아래 레시피북, 오른쪽 아래 주문서 → 책 모양 팝업 (BookPopup)
  *  - 계량 패널: 넓은 화면은 항아리와 주문서 사이(병 받침 위)에 겹쳐서, 세로 화면은 제작대 아래에
  *
@@ -22,6 +24,8 @@ import {
   type CSSProperties, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject,
 } from "react";
 import { getIngredient, type Ingredient } from "../data/ingredients.ts";
+import { shopIngredients } from "../game/unlocks.ts";
+import { josa } from "../lib/josa.ts";
 import { getRecipe } from "../data/recipes.ts";
 import { WORKBENCH_SCENE as WB } from "../data/shopArt.ts";
 import { keyFromKeyboard } from "../lib/answerInput.ts";
@@ -34,7 +38,7 @@ import { Icon } from "./Icon.tsx";
 import { MeasurePanel } from "./MeasurePanel.tsx";
 import { BookPopup, type BookKind } from "./BookPopup.tsx";
 import { IngredientArt, PotionBottle } from "./art/PotionArt.tsx";
-import { EnergyHerbPile } from "./art/HerbArt.tsx";
+import { IngredientPile } from "./art/IngredientPile.tsx";
 
 export const POUR_MS = 1200;
 export const BOTTLE_MS = 1600;
@@ -92,7 +96,9 @@ function useBenchLayout(ref: RefObject<HTMLDivElement | null>): BenchLayout {
 }
 
 interface DragInfo {
+  /** 이번 주문의 재료 과제 번호. 이번 주문에 필요 없는 재료면 -1 */
   index: number;
+  ingredientId: string;
   pointerId: number;
   startX: number;
   startY: number;
@@ -123,7 +129,8 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
   const [popup, setPopup] = useState<BookKind | null>(null);
   const bookBtn = useRef<HTMLButtonElement | null>(null);
   const clipBtn = useRef<HTMLButtonElement | null>(null);
-  const popupOpen = popup !== null;
+  /** 책 팝업이나 '새 레시피 해금' 안내가 열려 있으면 뒤쪽 조작을 막는다 */
+  const popupOpen = popup !== null || state.recipeNotices.length > 0;
 
   /* ---------------- 연출 (화면 효과일 뿐, 진행은 저장 상태가 결정) ---------------- */
   const [pourAnim, setPourAnim] = useState<PourEvent | null>(null);
@@ -169,7 +176,7 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
   const [drag, setDrag] = useState<DragInfo | null>(null);
   const dragRef = useRef<DragInfo | null>(null);
   const ghostRef = useRef<HTMLDivElement | null>(null);
-  const [bounce, setBounce] = useState<number | null>(null);
+  const [bounce, setBounce] = useState<string | null>(null);
   const suppressClick = useRef(false);
   const canPlace = brewing && active === null && !busy && !popupOpen;
 
@@ -198,15 +205,30 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
     dragRef.current = null;
     setDrag(null);
   }, []);
-  const onJarPointerDown = (e: ReactPointerEvent<HTMLButtonElement>, index: number) => {
+  /* ---------------- 안내 말풍선 (필요 없는 재료·구매 결과). 저장하지 않는 화면 안내 ---------------- */
+  const [notice, setNotice] = useState<{ text: string; seq: number } | null>(null);
+  const say = useCallback((text: string) => setNotice((n) => ({ text, seq: (n?.seq ?? 0) + 1 })), []);
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(null), 2600);
+    return () => window.clearTimeout(t);
+  }, [notice]);
+  const notNeeded = (ingredientId: string) => say(`이번 주문에는 ${josa(getIngredient(ingredientId).name, "이/가")} 필요 없어요.`);
+  /** 방금 산 재료 서랍: 잠금 해제 버튼을 연달아 누른 클릭·터치가 재료 집기로 이어지지 않게 잠깐 무시 */
+  const justBought = useRef<{ id: string; at: number } | null>(null);
+  const [sparkle, setSparkle] = useState<string | null>(null);
+  const freshlyBought = (id: string) => !!justBought.current && justBought.current.id === id && Date.now() - justBought.current.at < 700;
+
+  const onJarPointerDown = (e: ReactPointerEvent<HTMLButtonElement>, index: number, ingredientId: string) => {
     suppressClick.current = false;
-    if (!canPlace || order.tasks[index].status !== "pending" || dragRef.current) return; // 두 번째 손가락은 무시
+    if (freshlyBought(ingredientId)) return;
+    if (!canPlace || (index >= 0 && order.tasks[index].status !== "pending") || dragRef.current) return; // 두 번째 손가락은 무시
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       /* 무시 */
     }
-    dragRef.current = { index, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, active: false };
+    dragRef.current = { index, ingredientId, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, active: false };
   };
   const onJarPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
     const d = dragRef.current;
@@ -227,8 +249,12 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
     if (!d || e.pointerId !== d.pointerId) return;
     if (d.active) {
       suppressClick.current = true; // 드래그 뒤에 따라오는 click은 한 번 무시
-      if (canPlace && inRim(toCanvas(e.clientX, e.clientY))) place(d.index);
-      else setBounce(d.index); // 항아리 밖 → 서랍으로 돌아감(상태 변화 없음)
+      const inPot = inRim(toCanvas(e.clientX, e.clientY));
+      if (canPlace && inPot && d.index >= 0) place(d.index);
+      else {
+        setBounce(d.ingredientId); // 항아리 밖·필요 없는 재료 → 서랍으로 돌아감(상태 변화 없음)
+        if (inPot && d.index < 0) notNeeded(d.ingredientId);
+      }
     }
     setOverPot(false);
     endDrag();
@@ -240,14 +266,45 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
   useEffect(() => {
     if (drag?.active && dragRef.current) moveGhost(dragRef.current.startX, dragRef.current.startY);
   }, [drag]);
-  const onJarClick = (index: number) => {
+  const onJarClick = (index: number, ingredientId: string) => {
     if (suppressClick.current) {
       suppressClick.current = false;
       return;
     }
-    if (!canPlace || order.tasks[index].status !== "pending") return;
+    if (freshlyBought(ingredientId) || !canPlace) return;
+    if (index < 0) {
+      notNeeded(ingredientId);
+      return;
+    }
+    if (order.tasks[index].status !== "pending") return;
     setPicked((p) => (p === index ? null : index));
   };
+
+  /* ---------------- 재료 구매 (잠금 해제) ---------------- */
+  // 끌기·젓기·계량·병 담기·팝업 중에는 사지 않는다. 가격·잔액 검사는 게임 규칙(reducer → tryUnlock)이 내부 데이터로 다시 한다
+  const buy = (ing: Ingredient) => {
+    const buyBlocked = buyBlockReason();
+    if (buyBlocked) {
+      say(buyBlocked);
+      return;
+    }
+    if (state.unlockedIngredients.includes(ing.id)) return;
+    if (state.money < ing.unlockCost) {
+      say(`달빛 동전이 ${ing.unlockCost - state.money}개 더 필요해요. (가격 ${ing.unlockCost} · 지금 ${state.money})`);
+      return;
+    }
+    justBought.current = { id: ing.id, at: Date.now() };
+    setPicked(null);
+    dispatch({ type: "UNLOCK_INGREDIENT", ingredientId: ing.id });
+    playSfx("sell");
+    setSparkle(ing.id);
+    say(`${josa(ing.name, "을/를")} 쓸 수 있게 되었어요!`);
+  };
+  useEffect(() => {
+    if (!sparkle) return;
+    const t = window.setTimeout(() => setSparkle(null), 1200);
+    return () => window.clearTimeout(t);
+  }, [sparkle]);
 
   /* ---------------- 젓기 ---------------- */
   const stirMode = brewing && allDone && !stirred && active === null && !busy && !popupOpen;
@@ -358,6 +415,12 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
     if (!stirMode) finishStir();
   }, [stirMode, finishStir]);
 
+  const buyBlockReason = (): string | null =>
+    active !== null ? "계량을 마친 뒤에 살 수 있어요."
+    : dragRef.current?.active || tracker.current.active ? "손을 놓은 뒤에 살 수 있어요."
+    : busy || popupOpen ? "지금은 살 수 없어요."
+    : null;
+
   const openPopup = (kind: BookKind) => {
     // 끌던 재료·잡던 막대를 안전하게 놓는다 (제조 상태는 바뀌지 않음)
     finishStir();
@@ -422,6 +485,8 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
   }, [dispatch]);
 
   /* ---------------- 표시 ---------------- */
+  const legacyIngs = order.tasks.map((t) => getIngredient(t.ingredientId)).filter((ing) => ing.legacy);
+  const drawerIngs = [...shopIngredients(), ...legacyIngs];
   const doneIngs = order.tasks.filter((t) => t.status === "done").map((t) => getIngredient(t.ingredientId));
   const stir = order.stirProgress / STIR_TARGET;
   const baseColor = "#7fb6c4";
@@ -566,40 +631,76 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
           )}
         </svg>
 
-        {/* 서랍 (재료 공급원). 이번 주문에 쓰는 재료만 놓인다 */}
-        {brewing &&
-          order.tasks.map((t, i) => {
-            const ing = getIngredient(t.ingredientId);
-            const d = WB.drawers[ing.drawer] ?? WB.drawers[0];
-            const done = t.status !== "pending";
-            const label = t.status === "done" ? "넣음" : t.status === "measured" ? "계량함" : i === active ? "항아리 위" : "서랍";
-            const isPicked = picked === i;
-            const dragging = drag?.active && drag.index === i;
+        {/* 서랍 (재료 공급원). 판매 재료는 해금 여부에 따라 잠김/재료 더미, 이전 버전 주문이면 그 재료도 빈 서랍에 놓인다 */}
+        {drawerIngs.map((ing) => {
+          const d = WB.drawers[ing.drawer] ?? WB.drawers[0];
+          const owned = ing.legacy || state.unlockedIngredients.includes(ing.id);
+          if (!owned) {
+            const short = state.money < ing.unlockCost;
+            // 칸 안쪽 전체가 잠금 해제 버튼(터치하기 쉽게). 글자 크기는 장면 배율(--s)을 따른다
             return (
-              <button
-                key={t.problemId}
-                type="button"
-                className={`drawer-item ${isPicked ? "is-picked" : ""} ${done || i === active ? "is-used" : ""} ${bounce === i ? "is-bounce" : ""} ${dragging ? "is-dragging" : ""}`}
-                style={rect(d)}
-                aria-pressed={isPicked}
-                aria-label={`${ing.name} (${ing.unit}) ${label}${isPicked ? ", 집음" : ""}`}
-                disabled={done || i === active || !canPlace}
-                onPointerDown={(e: ReactPointerEvent<HTMLButtonElement>) => onJarPointerDown(e, i)}
-                onPointerMove={onJarPointerMove}
-                onPointerUp={onJarPointerUp}
-                onPointerCancel={onJarPointerCancel}
-                onLostPointerCapture={onJarPointerCancel}
-                onClick={() => onJarClick(i)}
-                data-testid={`jar-${t.ingredientId}`}
-                data-sfx="pick"
-              >
-                <DrawerArt ing={ing} width={d.width * L.s} height={d.height * L.s} picked={isPicked} />
-                <span className="drawer-tag">
-                  {t.status === "done" && <Icon name="check" size={13} />} {ing.name} · {ing.unit}
+              <div key={ing.id} className="drawer-lock" style={{ ...rect(d), ["--s" as string]: String(L.s) } as CSSProperties} data-testid={`lock-${ing.id}`} data-locked="true">
+                <span className="lock-shade" aria-hidden="true" />
+                <button
+                  type="button"
+                  className={`lock-body ${short ? "is-short" : ""}`}
+                  aria-label={`${ing.name} 잠김. 잠금 해제 가격 달빛 동전 ${ing.unlockCost}개${short ? `. 동전이 ${ing.unlockCost - state.money}개 더 필요해요 (지금 ${state.money}개)` : ""}`}
+                  onPointerDown={(e: ReactPointerEvent<HTMLButtonElement>) => e.stopPropagation()}
+                  onClick={() => buy(ing)}
+                  data-testid={`buy-${ing.id}`}
+                  data-short={short ? "true" : "false"}
+                  data-sfx="none"
+                >
+                  <span className="lock-price" data-testid={`price-${ing.id}`}>
+                    <Icon name="lock" size={Math.max(13, 30 * L.s)} /> <Icon name="coin" size={Math.max(12, 28 * L.s)} /> {ing.unlockCost}
+                  </span>
+                  <span className="lock-buy">잠금 해제</span>
+                </button>
+                {/* 재료 이름: 다른 서랍의 이름표와 같은 자리(칸 아래쪽 이름판) */}
+                <span className="drawer-tag lock-tag" data-testid={`lock-name-${ing.id}`}>
+                  <Icon name="lock" size={12} /> {ing.name}
                 </span>
-              </button>
+              </div>
             );
-          })}
+          }
+          const i = order.tasks.findIndex((t) => t.ingredientId === ing.id);
+          const t = i >= 0 ? order.tasks[i] : null;
+          const done = !!t && t.status !== "pending";
+          const label = !t ? "이번 주문에는 필요 없음" : t.status === "done" ? "넣음" : t.status === "measured" ? "계량함" : i === active ? "항아리 위" : "서랍";
+          const isPicked = i >= 0 && picked === i;
+          const dragging = drag?.active && drag.ingredientId === ing.id;
+          return (
+            <button
+              key={ing.id}
+              type="button"
+              className={`drawer-item ${isPicked ? "is-picked" : ""} ${done || (i >= 0 && i === active) ? "is-used" : ""} ${!t ? "is-spare" : ""} ${bounce === ing.id ? "is-bounce" : ""} ${dragging ? "is-dragging" : ""} ${sparkle === ing.id ? "is-new" : ""}`}
+              style={rect(d)}
+              aria-pressed={isPicked}
+              aria-label={`${ing.name} (${ing.unit}) ${label}${isPicked ? ", 집음" : ""}`}
+              disabled={done || (i >= 0 && i === active) || !canPlace}
+              onPointerDown={(e: ReactPointerEvent<HTMLButtonElement>) => onJarPointerDown(e, i, ing.id)}
+              onPointerMove={onJarPointerMove}
+              onPointerUp={onJarPointerUp}
+              onPointerCancel={onJarPointerCancel}
+              onLostPointerCapture={onJarPointerCancel}
+              onClick={() => onJarClick(i, ing.id)}
+              data-testid={`jar-${ing.id}`}
+              data-needed={t ? "true" : "false"}
+              data-sfx={t ? "pick" : "none"}
+            >
+              <IngredientPile ing={ing} width={d.width * L.s} height={d.height * L.s * 0.8} picked={isPicked} />
+              <span className="drawer-tag">
+                {t?.status === "done" && <Icon name="check" size={13} />} {ing.name} · {ing.unit}
+              </span>
+            </button>
+          );
+        })}
+        {notice && (
+          <p key={notice.seq} className="bench-notice" role="status" data-testid="bench-notice"
+            style={{ left: L.left + 70 * L.s, top: L.top + 196 * L.s, maxWidth: Math.max(240, 760 * L.s) }}>
+            {notice.text}
+          </p>
+        )}
         {picked !== null && (
           <button type="button" className="btn btn-quiet unpick-btn" style={{ left: L.left + WB.drawers[0].x * L.s, top: L.top + (WB.drawers[0].y + WB.drawers[0].height + 8) * L.s }} onClick={() => setPicked(null)} data-testid="unpick">
             집기 취소
@@ -709,12 +810,14 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
       {drag?.active && (
         <div className="drag-ghost" ref={ghostRef} aria-hidden="true">
           <span className="drag-ghost-inner">
-            <IngredientArt ingredient={getIngredient(order.tasks[drag.index].ingredientId)} size={84} />
+            <IngredientArt ingredient={getIngredient(drag.ingredientId)} size={84} />
           </span>
         </div>
       )}
 
-      {popup && <BookPopup kind={popup} state={state} order={order} onClose={closePopup} />}
+      {popup && (
+        <BookPopup kind={popup} state={state} order={order} onClose={closePopup} onRevealHint={() => dispatch({ type: "REVEAL_HINT", orderId: order.id })} />
+      )}
     </div>
   );
 }
@@ -737,16 +840,6 @@ function blend(a: string, b: string, t: number): string {
   const [x, y] = [p(a), p(b)];
   const c = x.map((v, i) => Math.round(v + (y[i] - v) * Math.max(0, Math.min(1, t))));
   return `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
-}
-
-function DrawerArt({ ing, width, height, picked }: { ing: Ingredient; width: number; height: number; picked: boolean }) {
-  if (ing.kind === "herb") return <EnergyHerbPile width={width} height={height * 0.8} picked={picked} />;
-  // 이전 버전 재료(달빛 이슬·별가루)는 호환용 그림
-  return (
-    <span className="drawer-legacy">
-      <IngredientArt ingredient={ing} size={Math.min(width, height) * 0.62} />
-    </span>
-  );
 }
 
 function BookButton({
@@ -808,7 +901,7 @@ function StepGuide({ order, step }: { order: Order; step: string }) {
           </li>
         ))}
       </ol>
-      <p className="muted small">계산식은 힌트를 누르면 볼 수 있어요. 힌트를 봐도 판매금은 줄지 않아요.</p>
+      <p className="muted small">식이 궁금하면 주문서의 ‘힌트’를 눌러 보세요. 힌트를 봐도 판매금은 줄지 않아요.</p>
     </div>
   );
 }

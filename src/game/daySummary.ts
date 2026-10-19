@@ -73,6 +73,21 @@ export function dayProblemCounts(day: DayState): ProblemCounts {
   return countTasks(day.orders.filter((o) => o.status !== "queued").flatMap((o) => o.tasks), day.rules);
 }
 
+/** 주문이 잘못 만든 포션인지: 틀린 재료 과제(계산·지정량·비교)가 하나라도 있으면 그 주문의 병 전체 */
+export function isWrongPotion(o: Order): boolean {
+  return o.tasks.some((t) => t.correct === false);
+}
+
+/** 잘못 만든 포션 병 수 (판매한 주문 기준). 맞춤·특별 주문은 1병, 여러 병 주문은 주문 병 수 그대로 */
+export function wrongPotionCount(orders: readonly Order[]): number {
+  return orders.filter((o) => o.status === "paid" && isWrongPotion(o)).reduce((sum, o) => sum + o.bottles, 0);
+}
+
+/** 판매한 포션 병 수 (모든 주문) */
+export function potionCount(orders: readonly Order[]): number {
+  return orders.filter((o) => o.status === "paid").reduce((sum, o) => sum + o.bottles, 0);
+}
+
 export function summarizeDay(day: DayState, moneyAfter: number, closedAt: string): DaySummary {
   const paid: Order[] = day.orders.filter((o) => o.status === "paid");
   const c = countTasks(paid.flatMap((o) => o.tasks), day.rules);
@@ -88,6 +103,8 @@ export function summarizeDay(day: DayState, moneyAfter: number, closedAt: string
     hintUsed: c.hintUsed,
     closedAt,
     ruleVersion: day.rules,
+    potionsMade: potionCount(paid),
+    wrongPotions: wrongPotionCount(paid),
   };
   if (day.rules === 2) return base;
   return {

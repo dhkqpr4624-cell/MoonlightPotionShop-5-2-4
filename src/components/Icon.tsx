@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 /** 화면 아이콘 (직접 제작한 SVG, 24×24). 이모지 대신 쓴다. currentColor를 따른다 */
 export type IconName =
   | "coin" | "moon" | "book" | "memo" | "bulb" | "save" | "records" | "sound" | "mute"
-  | "check" | "close" | "arrow" | "back" | "potion" | "home" | "settings" | "hand";
+  | "check" | "close" | "arrow" | "back" | "potion" | "home" | "settings" | "hand" | "lock" | "unlock";
 
 const P: Record<IconName, ReactElement> = {
   coin: (
@@ -70,6 +70,21 @@ const P: Record<IconName, ReactElement> = {
       <path d="M4 7 H 20 M4 17 H 20" />
       <circle cx="9" cy="7" r="2.5" fill="currentColor" />
       <circle cx="15" cy="17" r="2.5" fill="currentColor" />
+    </g>
+  ),
+  lock: (
+    <g>
+      <path d="M7.5 10.5 V 7.5 a4.5 4.5 0 0 1 9 0 V 10.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2.2" fill="currentColor" />
+      <circle cx="12" cy="15" r="1.7" fill="#2b1d3a" />
+      <path d="M12 15.5 V 18" stroke="#2b1d3a" strokeWidth="1.6" strokeLinecap="round" />
+    </g>
+  ),
+  unlock: (
+    <g>
+      <path d="M7.5 10.5 V 7.5 a4.5 4.5 0 0 1 8.6 -1.8" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+      <rect x="4.5" y="10.5" width="15" height="10" rx="2.2" fill="currentColor" />
+      <circle cx="12" cy="15" r="1.7" fill="#2b1d3a" />
     </g>
   ),
   hand: (

@@ -5,6 +5,7 @@
  * - 솥 액체 높이는 일정하다. 입력한 재료량과 무관한 화면 표현이며 계산·판정에 쓰지 않는다.
  */
 import { EnergyHerbIcon } from "./HerbArt.tsx";
+import { FeatherGrassIcon, WindShardIcon } from "./WindArt.tsx";
 import { useId, type Ref } from "react";
 import type { PotionLook } from "../../data/recipes.ts";
 import type { Ingredient } from "../../data/ingredients.ts";
@@ -225,6 +226,8 @@ function StarDustJar({ size }: { size: number }) {
 
 /** 재료 용기 그림 (선반·계량 패널·끌기에 같이 쓴다) */
 export function IngredientArt({ ingredient, size = 64 }: { ingredient: Ingredient; size?: number }) {
+  if (ingredient.id === "featherGrass") return <FeatherGrassIcon size={size} />;
+  if (ingredient.id === "windShard") return <WindShardIcon size={size} />;
   if (ingredient.kind === "herb") return <EnergyHerbIcon size={size} />;
   return ingredient.id === "starDust" ? <StarDustJar size={size} /> : <MoonDewFlask size={size} />;
 }

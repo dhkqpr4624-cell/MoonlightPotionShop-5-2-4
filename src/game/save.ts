@@ -1,8 +1,8 @@
 /**
- * 저장·불러오기·검증·마이그레이션 (저장 버전 3).
+ * 저장·불러오기·검증·마이그레이션 (저장 버전 5).
  *
  * - localStorage 키 하나에 게임 상태 전체(JSON 하나)를 저장한다.
- * - 버전 1(Phase 1) → 2 → 3, 버전 2(Phase 2) → 3 으로 자동으로 옮긴다. 옮기기 전 원본은 백업 키에 보관.
+ * - 버전 1 → 2 → 3 → 4 → 5 순서로 자동으로 옮긴다. 옮기기 전 원본은 백업 키(backup-v○)에 보관.
  * - 손상되었거나 규칙·참조가 맞지 않거나 더 새로운 버전인 저장은 덮어쓰지 않고 오류로 돌려준다.
  */
 import { isAppearanceOf } from "../data/appearances.ts";
@@ -10,14 +10,14 @@ import { CUSTOMERS, fillLine } from "../data/customers.ts";
 import { MULTI_EASY } from "../data/dialogues.ts";
 import { classifyProduct, LEARNING_TYPE_IDS, LEARNING_TYPES, MAX_INTRO_STAGE } from "../data/learningTypes.ts";
 import { LIFE_ITEMS } from "../data/lifeItems.ts";
-import { RECIPES, SPECIAL_ORDER_PRICE } from "../data/recipes.ts";
+import { RECIPES } from "../data/recipes.ts";
 import { equals, isDecimalString, multiplyStrings, parseDecimal, toDecimalString } from "../lib/decimal.ts";
 import { type DeckState } from "../lib/deck.ts";
 import { migrateV1toV2, validateV2State } from "./legacy/v2save.ts";
 import type * as V2 from "./legacy/v2types.ts";
 import { shiftConcept, SHIFT_VARIANTS } from "./orderFactory.ts";
 import { qualityOf, rewardFor } from "./outcome.ts";
-import { freeIngredients, normalizeUnlocked, shopIngredients } from "./unlocks.ts";
+import { freeIngredients, isRecipeAvailable, normalizeUnlocked, shopIngredients } from "./unlocks.ts";
 import { MAX_HINT_LEVEL } from "./reducer.ts";
 import {
   CUSTOMERS_PER_DAY,
@@ -31,7 +31,7 @@ import {
 
 export const SAVE_KEY = "moonlight-potion-shop/save";
 export const BACKUP_KEY_PREFIX = "moonlight-potion-shop/backup-";
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -183,7 +183,7 @@ export function validateOrder(o: unknown, where: string): string[] {
     if (o.price !== recipe.pricePerBottle * (o.bottles as number)) e.push(`${where}: 판매가가 레시피 가격과 맞지 않습니다.`);
   } else {
     if (o.bottles !== 1) e.push(`${where}: 맞춤·특별 주문은 1병입니다.`);
-    if (o.price !== SPECIAL_ORDER_PRICE) e.push(`${where}: 특별 주문 판매가가 올바르지 않습니다.`);
+    if (o.price !== recipe.specialPrice) e.push(`${where}: 특별 주문 판매가가 올바르지 않습니다.`);
   }
   if (o.kind === "customMultiplier" && !(isStr(o.multiplier) && isDecimalString(o.multiplier))) e.push(`${where}: 배수가 올바르지 않습니다.`);
   if (o.kind === "lifeItem") {
@@ -303,7 +303,7 @@ function validateLegacyRecord(r: unknown, i: number): string[] {
   return ok ? [] : [`${w}: 필수 값이 빠졌거나 형식이 다릅니다.`];
 }
 
-/** 버전 3 저장 데이터 전체 검증 */
+/** 버전 5 저장 데이터 전체 검증 */
 export function validateState(data: unknown): { ok: true; state: GameState } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   if (!isObject(data)) return { ok: false, errors: ["저장 데이터가 객체 형식이 아닙니다."] };
@@ -366,10 +366,21 @@ export function validateState(data: unknown): { ok: true; state: GameState } | {
   if (!isStrArray(ul) || new Set(ul).size !== ul.length || !ul.every((id) => shopIds.has(id)) || !freeIngredients().every((id) => ul.includes(id))) {
     errors.push("해금한 재료 목록이 올바르지 않습니다.");
   }
+  // 새 레시피 안내·첫 주문 목록: 중복 없이, 실제로 해금된(필요한 재료를 모두 가진) 레시피만
+  for (const [key, label] of [["recipeNotices", "새 레시피 해금 안내"], ["featuredRecipes", "새 레시피 첫 주문 목록"]] as const) {
+    const list = data[key];
+    if (
+      !isStrArray(list) || new Set(list).size !== list.length ||
+      !list.every((id) => RECIPES[id] && isStrArray(ul) && isRecipeAvailable(RECIPES[id], ul))
+    ) errors.push(`${label}이 올바르지 않습니다.`);
+  }
   if (!Array.isArray(data.dayHistory)) errors.push("지난 영업 결과가 목록이 아닙니다.");
   else {
     data.dayHistory.forEach((h, i) => {
-      if (!isObject(h) || !SUMMARY_NUMBERS.every((k) => isInt(h[k], 0)) || !isStr(h.closedAt)) errors.push(`지난 영업 결과 ${i + 1}: 형식이 올바르지 않습니다.`);
+      if (!isObject(h) || !SUMMARY_NUMBERS.every((k) => isInt(h[k], 0)) || !isStr(h.closedAt) ||
+        !["potionsMade", "wrongPotions"].every((k) => h[k] === undefined || isInt(h[k], 0))) {
+        errors.push(`지난 영업 결과 ${i + 1}: 형식이 올바르지 않습니다.`);
+      }
     });
     const days = (data.dayHistory as Obj[]).map((h) => (isObject(h) ? h.dayNumber : null));
     if (new Set(days).size !== days.length) errors.push("지난 영업 결과에 같은 일차가 두 번 있습니다.");
@@ -446,7 +457,7 @@ function convertV2Order(o: V2.Order): Order {
  * - 유형 소개 단계: 0(①②)에서 시작 → 다음 영업부터 ③④ … 순서대로 소개 (일차가 높아도 건너뛰지 않음)
  */
 /** 버전 3 모양 (해금 목록이 없음) */
-export type V3GameState = Omit<GameState, "saveVersion" | "unlockedIngredients"> & { saveVersion: 3 };
+export type V3GameState = Omit<GameState, "saveVersion" | "unlockedIngredients" | "recipeNotices" | "featuredRecipes"> & { saveVersion: 3 };
 
 export function migrateV2toV3(v2: V2.GameState): V3GameState {
   let day: DayState | null = null;
@@ -498,7 +509,19 @@ export function migrateV2toV3(v2: V2.GameState): V3GameState {
  * - 덱: 그대로 둔다. 이전 레시피 키는 새 후보에 없으므로 덱에서 자동으로 버려진다(lib/deck.ts).
  */
 export function migrateV3toV4(v3: Obj): Obj {
-  return { ...v3, saveVersion: 4, unlockedIngredients: normalizeUnlocked([]) };
+  return { ...v3, saveVersion: 4, unlockedIngredients: ["energyHerb"] };
+}
+
+/**
+ * 버전 4 → 5 (서랍 구매·바람 걸음 포션 버전)
+ * - 돈·일차·오늘의 주문 목록·현재 주문·제조 진행·입력 중인 답·젓기·지급 기록·학습 기록·복습·덱: 그대로
+ * - 해금 목록: 있던 것 그대로. 새 재료(깃털풀·바람 정령의 파편)는 목록에 없으므로 잠긴 상태다. 구매 내역·돈은 지어내지 않는다.
+ * - 새 항목: 새 레시피 해금 안내(recipeNotices)·첫 주문 목록(featuredRecipes) — 빈 목록
+ * - 지난 영업 결과의 새 집계(잘못 만든 포션 수)는 지난날 기록을 다시 계산해 만들지 않는다(없으면 표시하지 않음)
+ */
+export function migrateV4toV5(v4: Obj): Obj {
+  const list = isStrArray(v4.unlockedIngredients) ? v4.unlockedIngredients : [];
+  return { ...v4, saveVersion: 5, unlockedIngredients: normalizeUnlocked(list), recipeNotices: [], featuredRecipes: [] };
 }
 
 /* ------------------------------------------------------------------ */
@@ -516,9 +539,14 @@ export function interpretSaveData(data: unknown, seed: number): InterpretResult 
     const r = validateState(data);
     return r.ok ? { ok: true, state: r.state, migratedFrom: null } : { ok: false, kind: "invalid", errors: r.errors };
   }
+  if (v === 4) {
+    // 진행 상태(화면 포함)를 그대로 이어 간다
+    const r = validateState(migrateV4toV5(data));
+    return r.ok ? { ok: true, state: r.state, migratedFrom: 4 } : { ok: false, kind: "invalid", errors: r.errors };
+  }
   if (v === 3) {
     // 옮긴 사실을 처음 화면에서 알려 주도록 타이틀에서 시작 (이어하기를 누르면 그 화면으로 돌아간다: 제조 진행은 그대로)
-    const r = validateState({ ...migrateV3toV4(data), scene: "title" });
+    const r = validateState({ ...migrateV4toV5(migrateV3toV4(data)), scene: "title" });
     return r.ok ? { ok: true, state: r.state, migratedFrom: 3 } : { ok: false, kind: "invalid", errors: r.errors };
   }
   if (v === 1 || v === 2) {
@@ -532,7 +560,7 @@ export function interpretSaveData(data: unknown, seed: number): InterpretResult 
       if (!r2.ok) return { ok: false, kind: "invalid", errors: r2.errors };
       v2 = r2.state;
     }
-    const migrated = migrateV3toV4({ ...migrateV2toV3(v2), scene: "title" as const } as unknown as Obj);
+    const migrated = migrateV4toV5(migrateV3toV4({ ...migrateV2toV3(v2), scene: "title" as const } as unknown as Obj));
     const r3 = validateState(migrated);
     if (!r3.ok) return { ok: false, kind: "invalid", errors: [`Phase ${v} 저장을 옮기는 중 문제가 생겼습니다.`, ...r3.errors] };
     return { ok: true, state: r3.state, migratedFrom: v };

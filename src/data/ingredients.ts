@@ -8,10 +8,15 @@
  *    재료 해금 메뉴에 팔지 않는다.
  *
  * drawer: 제작대 위쪽 서랍 번호(data/shopArt.ts WORKBENCH_SCENE.drawers). 0이 맨 왼쪽 위.
+ *   0 기력초(무료) · 1 깃털풀 · 2 바람 정령의 파편 · 3·4 이전 버전 재료(진행 중이던 이전 주문을 마칠 때만 놓임) · 5 비어 있음
+ *
+ * 해금 가격 근거 (실제 출제기로 하루 주문 2,000개씩 계산한 평균 정상 판매금)
+ *   1일차(①② 소개) 약 132, 2일차 이후 약 110 / 모두 오답(60%)이면 약 79, 약 66
+ *   → 깃털풀 70 + 바람 정령의 파편 110 = 180: 모두 정답이면 1~2일, 모두 오답이어도 3일이면 둘 다 살 수 있다.
  */
 
 export type Unit = "mL" | "g";
-export type IngredientKind = "liquid" | "powder" | "herb";
+export type IngredientKind = "liquid" | "powder" | "herb" | "crystal";
 
 export interface Ingredient {
   id: string;
@@ -42,6 +47,26 @@ export const INGREDIENTS: Record<string, Ingredient> = {
     drawer: 0,
     unlockCost: 0,
   },
+  featherGrass: {
+    id: "featherGrass",
+    name: "깃털풀",
+    unit: "g",
+    kind: "herb",
+    color: "#b9e88a",
+    description: "깃털처럼 가볍고 길게 갈라진 잎을 가진 연녹색 풀",
+    drawer: 1,
+    unlockCost: 70,
+  },
+  windShard: {
+    id: "windShard",
+    name: "바람 정령의 파편",
+    unit: "g",
+    kind: "crystal",
+    color: "#7fe0e6",
+    description: "바람 정령이 지나간 자리에 남은, 가볍고 투명한 청록빛 결정",
+    drawer: 2,
+    unlockCost: 110,
+  },
   moonDew: {
     id: "moonDew",
     name: "달빛 이슬",
@@ -49,7 +74,7 @@ export const INGREDIENTS: Record<string, Ingredient> = {
     kind: "liquid",
     color: "#8fd3ff",
     description: "보름달 아래 풀잎에 맺힌 푸른 이슬",
-    drawer: 1,
+    drawer: 3,
     unlockCost: 0,
     legacy: true,
   },
@@ -60,7 +85,7 @@ export const INGREDIENTS: Record<string, Ingredient> = {
     kind: "powder",
     color: "#ffe27a",
     description: "떨어진 별똥별에서 모은 반짝이는 가루",
-    drawer: 2,
+    drawer: 4,
     unlockCost: 0,
     legacy: true,
   },

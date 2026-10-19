@@ -105,7 +105,7 @@ export function LearningRecords({ state, onBack }: { state: GameState; onBack: (
                       <td>{r.target}</td>
                       <td className={r.correct === false ? "is-wrong" : ""}>{r.submitted ?? "-"}</td>
                       <td>{r.correct === null ? "-" : r.correct ? "✓ 정확" : "✗ 다름"}</td>
-                      <td>{r.hintUsed ? `${r.hintLevel}단계` : "-"}</td>
+                      <td>{r.hintUsed ? (r.hintLevel > 1 ? `${r.hintLevel}단계(이전 버전)` : "사용") : "-"}</td>
                       <td>{r.explanationViewed ? "확인" : "-"}</td>
                       <td>{r.isReview ? "복습" : "일반"}</td>
                     </tr>

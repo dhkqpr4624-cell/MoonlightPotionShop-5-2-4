@@ -1,42 +1,20 @@
 /**
- * 힌트(3단계)와 계산 과정 해설. 모두 실제 문제 데이터에서 만든다.
- *  힌트 1: 답의 크기 어림
- *  힌트 2: 필요한 식과 계산 방법 (정답은 아직 말하지 않음)
- *  힌트 3: 실제 숫자로 계산 과정과 정답
- * 해설: 주문 조건 → 필요한 식 → 자연수 계산 → 소수점 처리 → 단위와 결과
+ * 주문서 힌트(재료별 식)와 오답 뒤 계산 과정 해설. 모두 실제 문제 데이터에서 만든다.
+ *  힌트: 재료별로 필요한 식만 (계산 결과·정답 없음)
+ *  해설: 주문 조건 → 필요한 식 → 자연수 계산 → 소수점 처리 → 단위와 결과 (답을 낸 뒤에만)
  */
 import { getIngredient } from "../data/ingredients.ts";
 import { getLifeItem } from "../data/lifeItems.ts";
-import { compare, equals, multiply, normalize, parseDecimal, toDecimalString, type Decimal } from "../lib/decimal.ts";
+import { compare, normalize, parseDecimal } from "../lib/decimal.ts";
 import { copula, josa } from "../lib/josa.ts";
 import { diagnoseWrong } from "./feedback.ts";
-import type { HintVisual, IngredientTask, Order, ShiftChoice } from "./types.ts";
-
-export interface HintCard {
-  title: string;
-  lines: string[];
-  visual?: HintVisual;
-}
+import type { IngredientTask, Order, ShiftChoice } from "./types.ts";
 
 const ONE = parseDecimal("1");
 
 function fraction(scale: number): string {
   return scale === 0 ? "1" : `1/${"1" + "0".repeat(scale)}`;
 }
-
-function unitText(scale: number): string {
-  return scale === 0 ? "1" : `0.${"0".repeat(scale - 1)}1`;
-}
-
-function floorDec(d: Decimal): Decimal {
-  const n = normalize(d);
-  return { digits: n.digits / 10n ** BigInt(n.scale), scale: 0 };
-}
-function ceilDec(d: Decimal): Decimal {
-  const f = floorDec(d);
-  return equals(f, d) ? f : { digits: f.digits + 1n, scale: 0 };
-}
-const s = (d: Decimal) => toDecimalString(d);
 
 export const CHOICE_LABEL: Record<ShiftChoice, string> = { x10: "10배", same: "같음", d10: "1/10배" };
 
@@ -64,31 +42,6 @@ function conditionLine(order: Order, task: IngredientTask): string {
     default:
       return "";
   }
-}
-
-function expression(task: IngredientTask): string {
-  return `${task.problem.a} × ${task.problem.b}`;
-}
-
-/** 답의 크기 어림 문장 */
-export function estimateLine(task: IngredientTask): string {
-  const p = task.problem;
-  const a = parseDecimal(p.a);
-  const b = parseDecimal(p.b);
-  const u = p.bMeaning === "itemCount" || p.bMeaning === "itemRatio" ? "" : p.unit;
-  if (normalize(b).scale === 0) {
-    // a × 자연수: a보다 크고 (a 올림) × b 보다 작다
-    const up = multiply(ceilDec(a), b);
-    const exact = equals(ceilDec(a), a);
-    const lowFloor = multiply(floorDec(a), b);
-    const lower = compare(lowFloor, a) > 0 ? lowFloor : a;
-    return exact
-      ? `${josa(p.a, "을/를")} ${p.b}번 더한 것이니까 ${p.a}${u}보다 커요.`
-      : `${josa(p.a, "을/를")} ${p.b}번 더한 것이니까 ${s(lower)}${u}보다 크고, ${s(ceilDec(a))} × ${p.b} = ${s(up)}${u}보다 작아요.`;
-  }
-  const c = compare(b, ONE);
-  if (c < 0) return `${p.a}의 ${p.b}배이고 ${josa(p.b, "은/는")} 1보다 작으니까, 답은 ${p.a}${u}보다 작아요.`;
-  return `${p.a}의 ${p.b}배이고 ${josa(p.b, "은/는")} 1보다 크니까, 답은 ${p.a}${u}보다 커요.`;
 }
 
 /** 실제 숫자를 쓴 계산 과정 (정답 포함) */
@@ -161,46 +114,34 @@ export function solutionSteps(order: Order, task: IngredientTask): string[] {
   return lines;
 }
 
-/** 힌트 카드 (level 1~3) */
-export function hintCard(order: Order, task: IngredientTask, level: number): HintCard {
-  const p = task.problem;
-  const ing = getIngredient(task.ingredientId);
-  if (task.mode === "specified") {
-    if (level <= 1) return { title: "힌트 1 · 무엇을 넣을까?", lines: [`${ing.name}는 계산하지 않아요. 주문 메모를 다시 읽어 보세요.`] };
-    if (level === 2) return { title: "힌트 2 · 어디서 찾을까?", lines: [`주문 메모에 '1병 기본량 그대로'라고 적혀 있어요. 레시피북에서 ${ing.name}의 1병당 양을 찾아보세요.`] };
-    return { title: "힌트 3 · 정답", lines: solutionSteps(order, task) };
-  }
-  if (task.mode === "concept" && task.concept) {
-    const c = task.concept;
-    if (level <= 1) return { title: "힌트 1 · 무엇이 바뀌었을까?", lines: [`${c.refA} → ${c.newA}, ${c.refB} → ${c.newB}. 두 식에서 바뀐 수를 찾아보세요. 소수점이 어느 쪽으로 몇 칸 움직였나요?`] };
-    if (level === 2) return { title: "힌트 2 · 곱의 변화 규칙", lines: [
-      "곱하는 수 하나가 10배가 되면 곱도 10배가 돼요.",
-      "곱하는 수 하나가 1/10배가 되면 곱도 1/10배가 돼요.",
-      "하나는 10배, 다른 하나는 1/10배가 되면 곱은 같아요.",
-    ] };
-    return { title: "힌트 3 · 풀이와 정답", lines: solutionSteps(order, task) };
-  }
-  if (level <= 1) return { title: "힌트 1 · 답의 크기 어림하기", lines: [estimateLine(task)] };
-  if (level === 2) {
-    const A = normalize(parseDecimal(p.a));
-    const B = normalize(parseDecimal(p.b));
-    return {
-      title: "힌트 2 · 필요한 식과 계산 방법",
-      lines: [
-        `필요한 식: ${expression(task)}`,
-        "소수점을 떼고 자연수처럼 곱해요.",
-        `곱하는 두 수의 소수점 아래 자릿수를 더하면 ${A.scale} + ${B.scale} = ${A.scale + B.scale}자리예요. 곱도 소수점 아래 ${A.scale + B.scale}자리가 되게 소수점을 찍어요.`,
-      ],
-    };
-  }
-  const A = normalize(parseDecimal(p.a));
-  const B = normalize(parseDecimal(p.b));
-  let visual: HintVisual | undefined;
-  if ((p.bMeaning === "bottles" || p.bMeaning === "itemCount") && A.scale > 0 && Number(A.digits) <= 30 && Number(p.b) <= 10) {
-    visual = { kind: "unitBlocks", perGroup: Number(A.digits), groups: Number(p.b), unitLabel: unitText(A.scale) };
-  }
-  void B;
-  return { title: "힌트 3 · 계산 과정과 정답", lines: solutionSteps(order, task), visual };
+/**
+ * 주문서 팝업의 '힌트': 이 주문에서 계량하는 재료마다 필요한 식 한 줄 (실제 주문 데이터로 만든다).
+ *  - 계산 과제: "기력초: 0.6 × 3을 계산해 보세요." — 계산 결과·정답·풀이 단계는 넣지 않는다
+ *  - 지정량 과제: 새 식을 만들지 않고, 정해진 양을 확인하도록 안내
+ *  - 비교 과제: 비교할 두 식과 살펴볼 관계만
+ */
+export interface OrderHint {
+  ingredientId: string;
+  name: string;
+  mode: IngredientTask["mode"];
+  text: string;
+}
+
+export function orderHints(order: Order): OrderHint[] {
+  return order.tasks.map((t) => {
+    const ing = getIngredient(t.ingredientId);
+    const p = t.problem;
+    let text: string;
+    if (t.mode === "specified") {
+      text = "계산하지 않아요. 레시피북에서 1병당 양을 확인하고 그대로 넣어요.";
+    } else if (t.mode === "concept" && t.concept) {
+      const c = t.concept;
+      text = `지난번 식 ${c.refA} × ${josa(c.refB, "과/와")} 이번 식 ${c.newA} × ${josa(c.newB, "을/를")} 비교해 보세요. 곱하는 두 수가 각각 몇 배가 되었는지 살펴보세요.`;
+    } else {
+      text = `${p.a} × ${josa(p.b, "을/를")} 계산해 보세요.`;
+    }
+    return { ingredientId: ing.id, name: ing.name, mode: t.mode, text };
+  });
 }
 
 /** 결과 확인 문구: 입력한 양 / 필요한 양 + (분명할 때만) 오답 원인 */

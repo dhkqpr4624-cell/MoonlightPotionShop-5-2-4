@@ -101,6 +101,11 @@ export interface IngredientTask {
   correct: boolean | null;
   /** 실제로 솥에 넣은 양 (오답이면 학생이 입력한 양 그대로) */
   addedAmount: string | null;
+  /**
+   * 힌트 사용. 0: 안 봄 / 1 이상: 봄.
+   * 지금은 제작대 주문서의 '힌트'로 식을 공개하면 아직 답을 내지 않은 학습 과제가 1이 된다(중복 없음).
+   * 이전 버전 계량 패널의 단계별 힌트 기록(1~3)은 그대로 보존한다.
+   */
   hintLevel: number;
   /** 결과 화면에서 풀이(해설)를 확인했는지 */
   explanationViewed: boolean;
@@ -316,12 +321,16 @@ export interface DaySummary {
   specifiedTasks?: number;
   specifiedCorrect?: number;
   quality?: { great: number; okay: number; poor: number };
+  /** 판매한 포션 병 수 (모든 주문의 병 수 합. 맞춤·특별 주문은 1병) — 저장 버전 5부터 */
+  potionsMade?: number;
+  /** 잘못 만든 포션 병 수: 틀린 재료 과제가 하나라도 있는 주문의 병 수 합 — 저장 버전 5부터 */
+  wrongPotions?: number;
 }
 
 export const CUSTOMERS_PER_DAY = 5;
 
 export interface GameState {
-  saveVersion: 4;
+  saveVersion: 5;
   scene: Scene;
   money: number;
   nextOrderNumber: number;
@@ -344,4 +353,8 @@ export interface GameState {
   paidOrderIds: string[];
   /** 해금한 재료 ID (저장 버전 4부터). 레시피 사용 가능 여부는 여기서 계산한다 (game/unlocks.ts) */
   unlockedIngredients: string[];
+  /** 아직 확인하지 않은 '새 레시피 해금' 안내 (레시피 ID). 확인하면 빠진다 (저장 버전 5부터) */
+  recipeNotices: string[];
+  /** 새로 해금되어 다음 영업에 처음 주문으로 넣을 레시피 ID. 주문에 넣으면 빠진다 (저장 버전 5부터) */
+  featuredRecipes: string[];
 }

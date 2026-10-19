@@ -23,7 +23,7 @@ import {
   classifyProduct, inRange, INTRO_STAGES, introducedTypes, type LearningTypeId,
 } from "../data/learningTypes.ts";
 import { getLifeItem, LIFE_ITEMS } from "../data/lifeItems.ts";
-import { getRecipe, SPECIAL_ORDER_PRICE, type Recipe } from "../data/recipes.ts";
+import { getRecipe, type Recipe } from "../data/recipes.ts";
 import { availableRecipes, freeIngredients } from "./unlocks.ts";
 import {
   compare, isNaturalNumber, multiplyStrings, parseDecimal, shiftPoint, toDecimalString,
@@ -292,7 +292,7 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
       ...base, kind: "customMultiplier", recipeId: recipe.id, bottles: 1, multiplier: m, life: null,
       tasks: recipe.additives.map((ad) => calcTask(id, ad.ingredientId, ad.amount, m, "multiplier")),
       autoAdditions: baseSolution(recipe, m, `기본 용액 ${recipe.baseSolution.amountMl}mL의 ${m}배를 자동으로 담아요`),
-      price: SPECIAL_ORDER_PRICE,
+      price: recipe.specialPrice,
       script,
     };
   }
@@ -343,7 +343,7 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
       given: { form, amount: a, times: b },
       tasks: [calcTask(id, ing.id, a, b, "multiplier")],
       autoAdditions: baseSolution(recipe, "1", `1병 기본 용액 ${recipe.baseSolution.amountMl}mL를 자동으로 담아요`),
-      price: SPECIAL_ORDER_PRICE,
+      price: recipe.specialPrice,
       script,
     };
   }
@@ -386,7 +386,7 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
     return {
       ...base, kind: "lifeItem", recipeId: recipe.id, bottles: 1, multiplier: null, life: { itemId: item.id, a, b },
       tasks, autoAdditions: baseSolution(recipe, "1", `1병 기본 용액 ${recipe.baseSolution.amountMl}mL를 자동으로 담아요`),
-      price: SPECIAL_ORDER_PRICE, script,
+      price: recipe.specialPrice, script,
     };
   }
 
@@ -420,7 +420,7 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
       ...base, kind: "pointShift", recipeId: recipe.id, bottles: 1, multiplier: null, life: null,
       tasks: [task, ...rest.map((ad) => specifiedTask(id, ad.ingredientId, ad.amount))],
       autoAdditions: baseSolution(recipe, "1", `1병 기본 용액 ${recipe.baseSolution.amountMl}mL를 자동으로 담아요`),
-      price: SPECIAL_ORDER_PRICE, script,
+      price: recipe.specialPrice, script,
     };
   }
 
@@ -442,6 +442,11 @@ export interface DayPlanInput {
   nextOrderNumber: number;
   review: ReviewCandidate[];
   rng: Rng;
+  /**
+   * 새로 해금되어 아직 주문에 나오지 않은 레시피 ID. 해금된 레시피라면 이 날 최소 1건 그 레시피 주문을 넣는다
+   * (현재 소개된 유형으로 낼 수 있는 여러 병·맞춤 배수 주문 중에서).
+   */
+  featureRecipes?: string[];
 }
 
 export interface DayPlanResult {
@@ -449,6 +454,8 @@ export interface DayPlanResult {
   decks: Record<string, DeckState>;
   nextOrderNumber: number;
   reviewCandidateId: string | null;
+  /** featureRecipes 중 이 날 실제로 주문에 넣은 레시피 */
+  featured: string[];
 }
 
 /** 복습 후보 중 오늘 낼 수 있는 것 (현재 소개된 유형, 바로 전날 복습에서 틀린 것은 쉬기) */
@@ -492,6 +499,7 @@ function drawAvoiding(deck: DeckState, keys: string[], rng: Rng, avoid: (k: stri
 /**
  * 하루 손님 5명의 주문을 정한다.
  * - 처음 소개되는 유형은 그날 꼭 나오게 한다
+ * - 새로 해금한 레시피는 그 다음 영업에 가능하면 1건 넣는다 (featureRecipes)
  * - 생활 소재 특별 주문 최대 1건, 비교 주문 최대 1건, 복습 주문 최대 1건
  * - 나머지는 여러 병·맞춤 배수 주문 (특별 주문은 첫 손님으로 두지 않음)
  */
@@ -518,6 +526,17 @@ export function planDay(input: DayPlanInput): DayPlanResult {
     const keys = recipeKeys.length ? recipeKeys
       : candidatesFor("customAmount", intro, recipes).filter((c) => c.types.includes(t)).map((c) => c.key);
     if (keys.length) slots.push({ kind: null, keys, special: false });
+  }
+
+  // 새로 해금한 레시피 첫 주문 (가능하면 1건). 그 레시피의 여러 병·맞춤 배수 주문 중 현재 소개된 유형만
+  const featured: string[] = [];
+  for (const rid of input.featureRecipes ?? []) {
+    if (slots.length >= CUSTOMERS_PER_DAY || !recipes.some((r) => r.id === rid)) continue;
+    const mine = recipes.filter((r) => r.id === rid);
+    const keys = [...candidatesFor("multiBottle", intro, mine), ...candidatesFor("customMultiplier", intro, mine)].map((c) => c.key);
+    if (!keys.length) continue;
+    slots.push({ kind: null, keys, special: false });
+    featured.push(rid);
   }
 
   // 복습 (하루 최대 1건)
@@ -609,7 +628,7 @@ export function planDay(input: DayPlanInput): DayPlanResult {
     orders.push({ ...order, status: i === 0 ? "arrived" : "queued" });
     n++;
   }
-  return { orders, decks, nextOrderNumber: n, reviewCandidateId };
+  return { orders, decks, nextOrderNumber: n, reviewCandidateId, featured };
 }
 
 export function keyKind(key: string): OrderKind {

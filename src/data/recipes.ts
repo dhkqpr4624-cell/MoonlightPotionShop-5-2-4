@@ -34,6 +34,8 @@ export interface Recipe {
   glowWord: string;
   /** 여러 병 주문 1병 판매 가격(달빛 동전) */
   pricePerBottle: number;
+  /** 맞춤 배수·손님 지정량(기준 양)·생활 소재·비교 주문 1건의 정상 판매가 */
+  specialPrice: number;
   /** 이 레시피로 낼 수 있는 학습 유형 (데이터 검증 테스트가 실제 기본량과 맞는지 확인한다) */
   supports: { multiBottle: LearningTypeId[]; customMultiplier: LearningTypeId[] };
   /** 짧은 소개 (레시피북에 표시) */
@@ -52,8 +54,30 @@ export const RECIPES: Record<string, Recipe> = {
     lookText: "연둣빛 액체 속에서 작은 잎 조각이 반짝여요",
     glowWord: "연둣빛",
     pricePerBottle: 5,
+    specialPrice: 20,
     supports: { multiBottle: ["d1xN"], customMultiplier: ["d1xD"] },
-    summary: "지친 몸에 기운을 북돋아 주는 포션이에요. 기력초 한 가지만 계량하면 돼요.",
+    summary: "지친 몸에 기운을 북돋아 주는 포션이에요.",
+  },
+  /**
+   * 바람 걸음 포션: 깃털풀(소수 한 자리) + 바람 정령의 파편(소수 두 자리).
+   *  여러 병 주문 → ① 0.4 × n, ② 0.35 × n / 맞춤 배수 → ⑤ 0.4 × 0.○, ⑥ 0.35 × 0.○
+   *  판매가: 계량 문제가 2개라 기력 포션보다 20% 높게 (1병 6, 특별 주문 24)
+   */
+  wind: {
+    id: "wind",
+    name: "바람 걸음 포션",
+    baseSolution: { name: "맑은 기본 용액", amountMl: "30" },
+    additives: [
+      { ingredientId: "featherGrass", amount: "0.4" },
+      { ingredientId: "windShard", amount: "0.35" },
+    ],
+    look: { liquid: "#5fd0e0", glow: "#d8fbff", particle: "mist", bottle: "tall", emblem: "cloud" },
+    lookText: "하늘빛 액체 속에서 작은 바람 소용돌이가 일어요",
+    glowWord: "하늘빛",
+    pricePerBottle: 6,
+    specialPrice: 24,
+    supports: { multiBottle: ["d1xN", "d2xN"], customMultiplier: ["d1xD", "d2xD"] },
+    summary: "발걸음을 바람처럼 가볍게 해 주는 포션이에요.",
   },
   starlight: {
     id: "starlight",
@@ -67,6 +91,7 @@ export const RECIPES: Record<string, Recipe> = {
     lookText: "푸른 액체 속에 별 입자가 반짝여요",
     glowWord: "별빛",
     pricePerBottle: 5,
+    specialPrice: 20,
     legacy: true,
     summary: "이전 버전 레시피예요. 진행 중이던 영업을 마칠 때만 써요.",
     supports: { multiBottle: ["d1xN", "d2xN"], customMultiplier: ["d1xD", "d2xD"] },
@@ -83,6 +108,7 @@ export const RECIPES: Record<string, Recipe> = {
     lookText: "붉은 액체에서 작은 불꽃 방울이 톡톡 튀어요",
     glowWord: "불꽃빛",
     pricePerBottle: 5,
+    specialPrice: 20,
     legacy: true,
     summary: "이전 버전 레시피예요. 진행 중이던 영업을 마칠 때만 써요.",
     supports: { multiBottle: [], customMultiplier: ["Nxd1", "Nxd2"] },
@@ -99,6 +125,7 @@ export const RECIPES: Record<string, Recipe> = {
     lookText: "초록 액체 속에 작은 잎이 둥둥 떠 있어요",
     glowWord: "초록빛",
     pricePerBottle: 5,
+    specialPrice: 20,
     legacy: true,
     summary: "이전 버전 레시피예요. 진행 중이던 영업을 마칠 때만 써요.",
     supports: { multiBottle: ["d1xN"], customMultiplier: ["d1xD"] },
@@ -115,13 +142,14 @@ export const RECIPES: Record<string, Recipe> = {
     lookText: "보랏빛 액체 위로 안개가 피어올라요",
     glowWord: "보랏빛",
     pricePerBottle: 5,
+    specialPrice: 20,
     legacy: true,
     summary: "이전 버전 레시피예요. 진행 중이던 영업을 마칠 때만 써요.",
     supports: { multiBottle: ["d2xN"], customMultiplier: ["d2xD"] },
   },
 };
 
-/** 맞춤 배수·생활 소재·비교 주문의 정상 판매금 (주문당) */
+/** 이전 버전의 특별 주문 정상 판매금 (주문당). 지금은 레시피마다 specialPrice로 정한다 */
 export const SPECIAL_ORDER_PRICE = 20;
 
 export function getRecipe(id: string): Recipe {

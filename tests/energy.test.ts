@@ -1,4 +1,4 @@
-// 기력 포션(재료 1종)·한 과제 판매금·재료 해금·저장 버전 4 (이전 3단계 저장 옮기기)
+// 기력 포션(재료 1종)·한 과제 판매금·재료 해금·저장 버전 4→5 (이전 3단계 저장 옮기기)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -7,7 +7,7 @@ import { INGREDIENTS, type Ingredient } from "../src/data/ingredients.ts";
 import { RECIPES, type Recipe } from "../src/data/recipes.ts";
 import { introducedTypes, LEARNING_TYPE_IDS, type LearningTypeId } from "../src/data/learningTypes.ts";
 import { amountCandidates, candidatesFor, createOrderFromKey, ORDER_KINDS, uncoveredTypes } from "../src/game/orderFactory.ts";
-import { hintCard, solutionSteps } from "../src/game/explain.ts";
+import { orderHints, solutionSteps } from "../src/game/explain.ts";
 import { summarizeDay } from "../src/game/daySummary.ts";
 import { interpretSaveData, loadGame, SAVE_KEY, validateState } from "../src/game/save.ts";
 import { buildSaveExport, parseImportText } from "../src/game/transfer.ts";
@@ -82,7 +82,7 @@ test("기본 레시피 주문은 0.6g을 그대로 쓰고, 다른 인수 구조�
         assert.ok(!(o.script.original + o.script.easy + o.script.memo.join(" ")).includes(hidden), `${c.key} 정답 노출`);
       }
       assert.match(solutionSteps(o, t)[0], /손님이/);
-      assert.equal(hintCard(o, t, 2).lines[0], `필요한 식: ${t.problem.a} × ${t.problem.b}`);
+      assert.match(orderHints(o)[0].text, new RegExp(`^${t.problem.a.replace(".", "\\.")} × ${t.problem.b.replace(".", "\\.")}(을|를) 계산해 보세요\\.$`), c.key);
     }
   }
 });
@@ -178,7 +178,7 @@ test("해금 기본값: 기력초·기력 포션은 처음부터, 이전 레시�
   assert.deepEqual(s.unlockedIngredients, ["energyHerb"]);
   assert.deepEqual(freeIngredients(), ["energyHerb"]);
   assert.deepEqual(availableRecipes(s.unlockedIngredients).map((r) => r.id), ["energy"]);
-  assert.deepEqual(shopIngredients().map((i) => i.id), ["energyHerb"], "게임 메뉴에는 실제 재료만");
+  assert.deepEqual(shopIngredients().map((i) => i.id), ["energyHerb", "featherGrass", "windShard"], "서랍에서 파는 실제 재료만");
   assert.equal(GAME_CATALOG.ingredients.moonGrass, undefined, "테스트 상품은 게임에 없음");
   const r = run(s, { type: "START", seed: 1 });
   assert.equal(r.money, 0, "돈 없이 첫 영업 시작");
@@ -212,7 +212,7 @@ test("재료 구매 규칙 (테스트 전용 데이터): 잔액 부족·중복 �
   assert.equal(tryUnlock(Number.NaN, start, "moonGrass", TEST).ok, false);
 });
 
-test("리듀서 UNLOCK_INGREDIENT: 실제 데이터로만, 영업 중에는 무시, 이미 해금이면 상태 그대로", () => {
+test("리듀서 UNLOCK_INGREDIENT: 실제 데이터로만, 이미 해금이면 상태 그대로", () => {
   const s = { ...createInitialState(), money: 500 };
   assert.equal(reducer(s, { type: "UNLOCK_INGREDIENT", ingredientId: "energyHerb" }), s);
   assert.equal(reducer(s, { type: "UNLOCK_INGREDIENT", ingredientId: "moonGrass" }), s, "게임 데이터에 없는 재료");
@@ -221,11 +221,11 @@ test("리듀서 UNLOCK_INGREDIENT: 실제 데이터로만, 영업 중에는 무�
   assert.equal(reducer(open, { type: "UNLOCK_INGREDIENT", ingredientId: "energyHerb" }), open);
 });
 
-/* ------------------------------ 저장 버전 4 ------------------------------ */
+/* ------------------------------ 저장 (버전 4에서 추가된 해금 목록) ------------------------------ */
 
-test("저장 v4: 해금 목록 검사 (기력초 빠짐·없는 재료·중복은 거부), 저장 → 복구 같음", () => {
+test("저장: 해금 목록 검사 (기력초 빠짐·없는 재료·중복은 거부), 저장 → 복구 같음", () => {
   const s = run(createInitialState(), { type: "START", seed: 3 });
-  assert.equal(s.saveVersion, 4);
+  assert.equal(s.saveVersion, 5);
   const r = validateState(roundTrip(s));
   assert.ok(r.ok);
   if (r.ok) assert.deepEqual(r.state, s);
@@ -237,7 +237,7 @@ test("저장 v4: 해금 목록 검사 (기력초 빠짐·없는 재료·중복�
   assert.equal(validateState(noField).ok, false);
 });
 
-test("저장 v4: 손님 지정량 주문의 조건·문제를 조작하면 거부", () => {
+test("저장: 손님 지정량 주문의 조건·문제를 조작하면 거부", () => {
   const key = amountCandidates(introducedTypes(1)).find((c) => c.key.includes(":base:"))!.key;
   let s = run(createInitialState(), { type: "START", seed: 4 });
   const o = { ...createOrderFromKey(key, { orderNumber: 1, customerId: "fox", rng: createRng(1) }), status: "arrived" as const };
@@ -254,7 +254,7 @@ test("저장 v4: 손님 지정량 주문의 조건·문제를 조작하면 거�
   assert.equal(validateState(t3).ok, false, "다른 주문에 지정량 정보");
 });
 
-test("3단계 저장(v3, 실제 3단계 코드로 만든 젓는 중 저장) → v4: 진행·돈·기록 보존, 그 하루는 원래 주문으로", () => {
+test("3단계 저장(v3, 실제 3단계 코드로 만든 젓는 중 저장) → v5: 진행·돈·기록 보존, 그 하루는 원래 주문으로", () => {
   const raw = fixture("phase3-midstir.json");
   const v3 = JSON.parse(raw);
   const store = memoryStorage();
@@ -265,7 +265,7 @@ test("3단계 저장(v3, 실제 3단계 코드로 만든 젓는 중 저장) → 
   const s = l.state;
   assert.equal(l.migratedFrom, 3);
   assert.equal(store.mem.get("moonlight-potion-shop/backup-v3"), raw, "원본 백업");
-  assert.equal(s.saveVersion, 4);
+  assert.equal(s.saveVersion, 5);
   assert.deepEqual(s.unlockedIngredients, ["energyHerb"]);
   assert.equal(s.money, v3.money);
   assert.deepEqual(s.day!.orders, v3.day.orders, "진행 중인 하루의 주문 그대로");

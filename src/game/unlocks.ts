@@ -53,6 +53,12 @@ export function availableRecipes(unlocked: readonly string[], catalog: UnlockCat
   return Object.values(catalog.recipes).filter((r) => isRecipeAvailable(r, unlocked));
 }
 
+/** 해금 목록이 before → after로 바뀔 때 새로 쓸 수 있게 된 레시피 ID */
+export function newlyAvailableRecipes(before: readonly string[], after: readonly string[], catalog: UnlockCatalog = GAME_CATALOG): string[] {
+  const had = new Set(availableRecipes(before, catalog).map((r) => r.id));
+  return availableRecipes(after, catalog).map((r) => r.id).filter((id) => !had.has(id));
+}
+
 export type UnlockFailure = "unknown" | "notForSale" | "already" | "insufficient";
 export type UnlockResult =
   | { ok: true; money: number; unlocked: string[]; cost: number }
@@ -69,9 +75,10 @@ export function tryUnlock(money: number, unlocked: readonly string[], ingredient
   return { ok: true, money: money - cost, unlocked: normalizeUnlocked([...unlocked, ingredientId], catalog), cost };
 }
 
-export const UNLOCK_MESSAGE: Record<UnlockFailure, string> = {
+export const UNLOCK_MESSAGE: Record<UnlockFailure | "busy", string> = {
   unknown: "알 수 없는 재료예요.",
   notForSale: "해금할 수 없는 재료예요.",
   already: "이미 쓸 수 있는 재료예요. 돈은 빠지지 않았어요.",
   insufficient: "달빛 동전이 모자라요.",
+  busy: "지금 하는 일을 마친 뒤에 살 수 있어요.",
 };

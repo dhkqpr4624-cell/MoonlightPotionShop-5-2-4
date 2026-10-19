@@ -7,7 +7,7 @@
  *
  * 한 번만 일어나야 하는 행동은 대상 주문 ID나 일차를 함께 보내고, 현재 상태와 맞지 않으면 무시한다.
  */
-import { normalizeUnlocked, tryUnlock } from "./unlocks.ts";
+import { availableRecipes, newlyAvailableRecipes, normalizeUnlocked, tryUnlock } from "./unlocks.ts";
 import { getIngredient } from "../data/ingredients.ts";
 import { MAX_INTRO_STAGE, INTRO_STAGES } from "../data/learningTypes.ts";
 import { applyKey, validateAnswerInput, type InputKey } from "../lib/answerInput.ts";
@@ -30,6 +30,7 @@ import {
   type ShiftChoice,
 } from "./types.ts";
 
+/** 힌트 기록의 최댓값. 이전 버전(계량 패널 단계별 힌트)의 1~3 기록을 저장 검증에서 받아 주기 위해 남긴다 */
 export const MAX_HINT_LEVEL = 3;
 /** 젓기 한 번 전송(STIR 액션)의 최대 양. Phase 4부터 젓기 버튼은 없고 막대 드래그·키보드로만 젓는다 */
 export const STIR_MAX_STEP = 25;
@@ -47,7 +48,8 @@ export type Action =
   | { type: "INPUT_KEY"; key: InputKey }
   | { type: "SUBMIT_ANSWER"; now: string }
   | { type: "SUBMIT_CHOICE"; choice: ShiftChoice; now: string }
-  | { type: "REQUEST_HINT" }
+  /** 주문서 팝업의 '힌트': 이 주문의 학습 과제 식을 공개. 아직 답을 내지 않은 과제만 힌트 사용으로 기록(중복 없음) */
+  | { type: "REVEAL_HINT"; orderId: string }
   | { type: "VIEW_EXPLANATION" }
   | { type: "ADD_TO_CAULDRON"; orderId: string; taskIndex: number }
   | { type: "STIR"; orderId: string; amount: number }
@@ -56,12 +58,14 @@ export type Action =
   | { type: "NEXT_CUSTOMER"; fromOrderId: string }
   | { type: "CLOSE_DAY"; dayNumber: number; now: string }
   | { type: "NEXT_DAY"; fromDay: number; seed: number }
-  /** 재료 해금(영업 중이 아닐 때만). 가격은 내부 데이터에서 읽는다 */
-  | { type: "UNLOCK_INGREDIENT"; ingredientId: string };
+  /** 재료 해금(제작대 서랍). 가격은 내부 데이터에서 읽는다. 계량 패널이 열려 있으면 무시 */
+  | { type: "UNLOCK_INGREDIENT"; ingredientId: string }
+  /** '새 레시피 해금' 안내 확인 */
+  | { type: "ACK_RECIPE_NOTICE"; recipeId: string };
 
 export function createInitialState(): GameState {
   return {
-    saveVersion: 4,
+    saveVersion: 5,
     scene: "title",
     money: 0,
     nextOrderNumber: 1,
@@ -79,6 +83,8 @@ export function createInitialState(): GameState {
     stats: { ordersCompleted: 0, potionsSold: 0, problemsSolved: 0 },
     paidOrderIds: [],
     unlockedIngredients: normalizeUnlocked([]),
+    recipeNotices: [],
+    featuredRecipes: [],
   };
 }
 
@@ -108,11 +114,15 @@ function openDay(state: GameState, dayNumber: number, introStage: number, newTyp
   const rng = createRng(seed);
   const made = planDay({
     dayNumber, introStage, newTypes, decks: state.decks, nextOrderNumber: state.nextOrderNumber, review: state.review, rng,
-    unlocked: state.unlockedIngredients,
+    unlocked: state.unlockedIngredients, featureRecipes: state.featuredRecipes,
   });
+  // 주문에 넣은 레시피와 더 이상 쓸 수 없는 레시피는 '첫 주문' 목록에서 뺀다
+  const usable = new Set(availableRecipes(state.unlockedIngredients).map((r) => r.id));
+  const featuredRecipes = state.featuredRecipes.filter((id) => usable.has(id) && !made.featured.includes(id));
   return {
     ...state,
     ...RESET_WORK,
+    featuredRecipes,
     decks: made.decks,
     nextOrderNumber: made.nextOrderNumber,
     day: {
@@ -342,13 +352,16 @@ export function reducer(state: GameState, action: Action): GameState {
       return confirmSubmission(state, o, state.activeTask, action.choice, action.choice === task.concept.correct, action.now);
     }
 
-    case "REQUEST_HINT": {
-      // 힌트는 답을 확정하기 전에만 (감점 없음)
-      if (!brewing || state.activeTask === null) return state;
-      const task = order!.tasks[state.activeTask];
-      if (!task || task.status !== "pending") return state;
-      const level = Math.min(MAX_HINT_LEVEL, task.hintLevel + 1);
-      return withOrder(state, updateTask(order!, state.activeTask, { ...task, hintLevel: level }));
+    case "REVEAL_HINT": {
+      // 식만 공개한다(정답·풀이 없음, 감액 없음). 이미 답을 낸 과제의 기록은 바꾸지 않는다
+      if (!brewing || order!.id !== action.orderId) return state;
+      let changed = false;
+      const tasks = order!.tasks.map((t) => {
+        if (!isLearningTask(t) || t.status !== "pending" || t.hintLevel > 0) return t;
+        changed = true;
+        return { ...t, hintLevel: 1 };
+      });
+      return changed ? withOrder(state, { ...order!, tasks }) : state;
     }
 
     case "VIEW_EXPLANATION": {
@@ -458,11 +471,24 @@ export function reducer(state: GameState, action: Action): GameState {
     }
 
     case "UNLOCK_INGREDIENT": {
-      // 영업 중(주문을 받는 중)에는 사지 않는다. 마감 뒤나 영업 전에만
-      if (day && day.status === "open") return state;
+      // 제작대 서랍에서 산다. 계량 패널이 열려 있으면 받지 않는다(끌기·젓기 중 차단은 화면에서)
+      if (state.activeTask !== null) return state;
       const r = tryUnlock(state.money, state.unlockedIngredients, action.ingredientId);
       if (!r.ok) return state; // 없는 재료·이미 해금·잔액 부족: 아무것도 바꾸지 않음 (중복 차감 없음)
-      return { ...state, money: r.money, unlockedIngredients: r.unlocked };
+      // 새로 쓸 수 있게 된 레시피: 안내(한 번)와 다음 영업 첫 주문 목록에 넣는다. 오늘 주문은 그대로
+      const fresh = newlyAvailableRecipes(state.unlockedIngredients, r.unlocked);
+      return {
+        ...state,
+        money: r.money,
+        unlockedIngredients: r.unlocked,
+        recipeNotices: [...state.recipeNotices, ...fresh.filter((id) => !state.recipeNotices.includes(id))],
+        featuredRecipes: [...state.featuredRecipes, ...fresh.filter((id) => !state.featuredRecipes.includes(id))],
+      };
+    }
+
+    case "ACK_RECIPE_NOTICE": {
+      if (!state.recipeNotices.includes(action.recipeId)) return state;
+      return { ...state, recipeNotices: state.recipeNotices.filter((id) => id !== action.recipeId) };
     }
 
     default:

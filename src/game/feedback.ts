@@ -137,7 +137,7 @@ export function wrongFeedback(p: Problem, answerText: string, ingredientName: st
       return {
         kind: "wrong",
         title,
-        lines: ["식을 한 번 더 천천히 계산해 보세요. 막히면 ‘힌트’를 눌러도 괜찮아요."],
+        lines: ["식을 한 번 더 천천히 계산해 보세요. 막히면 주문서의 ‘힌트’를 눌러도 괜찮아요."],
       };
   }
 }

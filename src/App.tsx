@@ -7,6 +7,7 @@ import { TitleScreen, type LoadIssue } from "./components/TitleScreen.tsx";
 import { CounterScene } from "./components/CounterScene.tsx";
 import { WorkbenchScene } from "./components/WorkbenchScene.tsx";
 import { ClosingScene } from "./components/ClosingScene.tsx";
+import { RecipeUnlockNotice } from "./components/RecipeUnlockNotice.tsx";
 import { LearningRecords } from "./components/LearningRecords.tsx";
 import { SoundSettings } from "./components/SoundSettings.tsx";
 import { Icon } from "./components/Icon.tsx";
@@ -181,7 +182,13 @@ export default function App() {
             onNextDay={nextDay}
             onTitle={() => dispatch({ type: "GO_TITLE" })}
             busy={shutterFx !== null}
-            onUnlock={(ingredientId) => dispatch({ type: "UNLOCK_INGREDIENT", ingredientId })}
+          />
+        )}
+        {/* 새 레시피 해금 안내: 확인할 때까지 게임 화면 위에 (저장된 안내라 이어하기 때도 다시 뜬다) */}
+        {inGame && state.recipeNotices.length > 0 && !shutterFx && (
+          <RecipeUnlockNotice
+            recipeId={state.recipeNotices[0]}
+            onConfirm={() => dispatch({ type: "ACK_RECIPE_NOTICE", recipeId: state.recipeNotices[0] })}
           />
         )}
       </main>

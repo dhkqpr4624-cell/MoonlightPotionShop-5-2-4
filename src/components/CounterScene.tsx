@@ -195,15 +195,13 @@ export function CounterScene({
         data-testid="counter-base"
       >
         <div className="counter-top" ref={contentRef}>
-        <div className="order-ticket" aria-label="주문서">
-          <div className="ticket-title">
-            손님 {day.currentIndex + 1} / {day.orders.length} · 주문서 #{order.id.replace("order-", "")}
+        {/* 작은 주문 요약: 손님 순서와 정상 판매가(품질 감액 전 금액)만. 자세한 주문은 손님 대사와 제작대 주문서에서 */}
+        <div className="order-ticket order-ticket--mini" aria-label="주문 요약" data-testid="order-ticket">
+          <div className="ticket-row" data-testid="ticket-customer">
+            손님 <strong>{day.currentIndex + 1} / {day.orders.length}</strong>
           </div>
-          <ul className="ticket-memo" data-testid="ticket-memo">
-            {order.script.memo.slice(0, 3).map((m, i) => <li key={i}>{m}</li>)}
-          </ul>
-          <div className="ticket-price">
-            정상 판매금 <strong>{order.price}</strong> <Icon name="coin" size={16} />
+          <div className="ticket-row ticket-price" data-testid="ticket-price">
+            정상 판매가 <Icon name="coin" size={18} /> <strong>{order.price}G</strong>
           </div>
         </div>
 

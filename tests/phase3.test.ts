@@ -9,7 +9,7 @@ import { LIFE_RULE_NOTE } from "../src/data/dialogues.ts";
 import {
   candidatesFor, createOrderFromKey, lifePairOutOfRange, MULTIPLIERS_D1, MULTIPLIERS_D2, uncoveredTypes,
 } from "../src/game/orderFactory.ts";
-import { hintCard, resultSummary, solutionSteps } from "../src/game/explain.ts";
+import { orderHints, resultSummary, solutionSteps } from "../src/game/explain.ts";
 import { rewardFor } from "../src/game/outcome.ts";
 import { loadGame, SAVE_KEY, validateState } from "../src/game/save.ts";
 import { buildLearningExport, parseImportText } from "../src/game/transfer.ts";
@@ -282,19 +282,14 @@ test("3D 데이터 검증: 모든 유형에 출제 후보, 인수 범위, 레시
   assert.equal(LEARNING_TYPE_IDS.length, 7);
 });
 
-test("3D 힌트 3단계: 1·2단계는 정답을 말하지 않고 3단계에 계산 과정과 정답", () => {
+test("3D 주문서 힌트: 재료별 식만 (계산 결과·정답 없음), 지정량은 확인 안내", () => {
   const o = createOrderFromKey("custom:courage:0.3", { orderNumber: 1, customerId: "rabbit", rng: createRng(2) });
   const t = o.tasks[0];
   assert.equal(t.problem.answer, "1.2");
-  const h1 = hintCard(o, t, 1).lines.join(" ");
-  const h2 = hintCard(o, t, 2).lines.join(" ");
-  const h3 = hintCard(o, t, 3).lines.join(" ");
-  assert.match(h1, /4mL보다 작아요/);
-  assert.match(h2, /4 × 0\.3/);
-  assert.doesNotMatch(h1 + h2, /1\.2/);
-  assert.match(h3, /4 × 3 = 12/);
-  assert.match(h3, /1보다 작으니까/);
-  assert.match(h3, /1\.2mL/);
+  const h = orderHints(o);
+  assert.equal(h.length, o.tasks.length);
+  assert.equal(h[0].text, "4 × 0.3을 계산해 보세요.");
+  assert.doesNotMatch(h.map((x) => x.text).join(" "), /1\.2|= /);
 });
 
 /* ------------------------- v2 마이그레이션 ------------------------- */
