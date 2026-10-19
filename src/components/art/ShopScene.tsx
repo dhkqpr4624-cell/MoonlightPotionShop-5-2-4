@@ -3,8 +3,12 @@
  *
  * 겹침 순서(뒤 → 앞): 마을길 → 손님 → 덧문 → 아치 → 테이블.  대사창·주문서·버튼은 이 장면 위의 HTML.
  *
- * 배치: 창구 캔버스(1672×941)를 늘리지 않고 같은 비율로 키워 화면을 덮는다(남는 바깥쪽만 잘림).
- * 이때 캔버스의 카운터 윗면(tableTop)이 화면의 주문서·버튼 영역 윗면과 정확히 같은 높이가 되게 맞춘다.
+ * 배치(contain): 창구 캔버스(1672×941)를 늘리거나 자르지 않고, 위·아래·좌·우가 모두 보이도록 같은 비율로 맞춘다.
+ *  - 화면 비율이 다르면 바깥에 차분한 단색 여백이 생긴다.
+ *  - 상단 상태 바를 뺀 실제 장면 상자 크기를 재서 맞춘다(100vh 가정 없음).
+ *  - 주문서·버튼(HTML)은 캔버스의 카운터 윗면(tableTop)부터 아래에 놓인다. 테이블 그림 높이가 모자라면
+ *    장면을 위쪽 여백으로 올리고, 그래도 모자라면 장면을 조금 줄인다(자르지는 않음).
+ *  - 배경·손님·덧문은 모두 같은 캔버스 좌표계(scale 하나) 안에 있어 따로 움직이지 않는다.
  */
 import { useLayoutEffect, useState, type ReactNode, type RefObject } from "react";
 import { COUNTER_SCENE as SC } from "../../data/shopArt.ts";
@@ -25,6 +29,9 @@ export interface SceneLayout {
   sceneTop: number;
   /** 아래 HTML 카운터 영역 높이 */
   counterH: number;
+  /** HTML 카운터 영역의 가로 범위 (장면 폭 안) */
+  counterLeft: number;
+  counterWidth: number;
   /** 좁은 화면: 손님 가운데, 대사창은 위 */
   narrow: boolean;
 }
@@ -33,19 +40,26 @@ const NARROW_PX = 900;
 
 export function computeLayout(width: number, height: number, contentH: number): SceneLayout {
   const below = SC.height - SC.tableTop;
-  let s = Math.max(width / SC.width, height / SC.height);
-  let counterH = below * s;
-  if (contentH > counterH) {
-    // 주문서·버튼이 테이블 그림보다 높으면, 테이블 윗면을 그 위에 맞춘다
-    s = Math.max(width / SC.width, (height - contentH) / SC.tableTop);
-    counterH = Math.max(contentH, below * s);
+  const w = Math.max(1, width);
+  const h = Math.max(1, height);
+  let s = Math.min(w / SC.width, h / SC.height);
+  let sceneTop = (h - SC.height * s) / 2;
+  if (contentH > 0 && sceneTop + SC.tableTop * s + contentH > h) {
+    // 주문서·버튼 자리가 모자라면 장면을 위쪽 여백으로 올리고, 그래도 모자라면 장면을 줄인다
+    sceneTop = Math.max(0, h - contentH - SC.tableTop * s);
+    if (sceneTop + SC.tableTop * s + contentH > h) {
+      s = Math.max(0.05, (h - contentH) / SC.tableTop);
+      sceneTop = 0;
+    }
   }
-  const tableY = height - counterH;
+  const tableY = sceneTop + SC.tableTop * s;
+  const counterH = Math.min(h - tableY, Math.max(contentH, below * s));
+  const sceneLeft = (w - SC.width * s) / 2;
+  const counterLeft = Math.max(0, sceneLeft);
   return {
-    s, width, height, tableY, counterH,
-    sceneLeft: (width - SC.width * s) / 2,
-    sceneTop: tableY - SC.tableTop * s,
-    narrow: width < NARROW_PX,
+    s, width: w, height: h, tableY, counterH, sceneLeft, sceneTop,
+    counterLeft, counterWidth: Math.min(w, SC.width * s),
+    narrow: w < NARROW_PX,
   };
 }
 
@@ -53,6 +67,7 @@ export function computeLayout(width: number, height: number, contentH: number): 
 export function useSceneLayout(box: RefObject<HTMLElement | null>, content?: RefObject<HTMLElement | null>): SceneLayout {
   const [layout, setLayout] = useState<SceneLayout>(() =>
     computeLayout(typeof window !== "undefined" ? window.innerWidth : 1180, typeof window !== "undefined" ? window.innerHeight - 64 : 756, 0),
+    // 첫 그림 전에 실제 상자 크기로 다시 잰다(useLayoutEffect)
   );
   useLayoutEffect(() => {
     const el = box.current;

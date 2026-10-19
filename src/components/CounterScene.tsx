@@ -189,7 +189,11 @@ export function CounterScene({
         </div>
       </div>
 
-      <div className="counter-base" style={{ height: layout.counterH }} data-testid="counter-base">
+      <div
+        className="counter-base"
+        style={{ top: layout.tableY, left: layout.counterLeft, width: layout.counterWidth, height: layout.counterH }}
+        data-testid="counter-base"
+      >
         <div className="counter-top" ref={contentRef}>
         <div className="order-ticket" aria-label="주문서">
           <div className="ticket-title">

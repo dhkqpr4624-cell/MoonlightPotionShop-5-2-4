@@ -3,7 +3,8 @@
  * animate=true 이면 (방금 '영업 마감'을 눌렀을 때) 손님 퇴장 → 덧문 닫힘 → 표지판 → 결과 순서로 보여 준다.
  * 새로고침·이어하기로 들어오면 연출 없이 닫힌 모습과 결과를 바로 보여 준다.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { UnlockMenu } from "./UnlockMenu.tsx";
 import { encouragement, summarizeDay } from "../game/daySummary.ts";
 import type { DayState, GameState } from "../game/types.ts";
 import { ClosedSign } from "./art/Shutters.tsx";
@@ -21,6 +22,7 @@ export function ClosingScene({
   onNextDay,
   onTitle,
   busy,
+  onUnlock,
 }: {
   state: GameState;
   animate: boolean;
@@ -28,7 +30,14 @@ export function ClosingScene({
   onNextDay: () => void;
   onTitle: () => void;
   busy: boolean;
+  onUnlock: (ingredientId: string) => void;
 }) {
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const unlockBtn = useRef<HTMLButtonElement | null>(null);
+  const closeUnlock = () => {
+    setUnlockOpen(false);
+    window.setTimeout(() => unlockBtn.current?.focus(), 0);
+  };
   const boxRef = useRef<HTMLDivElement | null>(null);
   const layout = useSceneLayout(boxRef);
   const day = state.day as DayState;
@@ -120,12 +129,16 @@ export function ClosingScene({
             <button type="button" className="btn btn-ghost-dark btn-big" onClick={onTitle} disabled={busy} data-testid="closing-title">
               타이틀로
             </button>
+            <button type="button" className="btn btn-light btn-big" onClick={() => setUnlockOpen(true)} disabled={busy} data-testid="open-unlock" ref={unlockBtn}>
+              재료 해금
+            </button>
             <button type="button" className="btn btn-primary btn-big" onClick={onNextDay} disabled={busy} data-testid="next-day" data-sfx="none">
               <Icon name="moon" /> 다음 날 영업
             </button>
           </div>
         </section>
       )}
+      {unlockOpen && <UnlockMenu state={state} onUnlock={onUnlock} onClose={closeUnlock} />}
     </div>
   );
 }

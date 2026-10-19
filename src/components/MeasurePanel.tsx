@@ -52,7 +52,7 @@ export function MeasurePanel({
   }, [task.status, task.problemId, task.correct]);
 
   const question = concept
-    ? "이번 달빛 이슬 양은 지난번의 몇 배일까요?"
+    ? `이번 ${ing.name} 양은 지난번의 몇 배일까요?`
     : `${josa(ing.name, "은/는")} 몇 ${ing.unit} 넣을까요?`;
 
   return (

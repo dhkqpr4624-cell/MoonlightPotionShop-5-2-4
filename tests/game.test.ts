@@ -7,7 +7,7 @@ import { drawFromDeck, EMPTY_DECK } from "../src/lib/deck.ts";
 import { createRng } from "../src/lib/rng.ts";
 import { validateState } from "../src/game/save.ts";
 import { STIR_TARGET, type Problem } from "../src/game/types.ts";
-import { answerActive, correctAnswer, NOW, order, roundTrip, run, startBrewing, submit, type } from "./helpers.ts";
+import { answerActive, correctAnswer, legacyBrewing, NOW, order, roundTrip, run, startBrewing, submit, type } from "./helpers.ts";
 
 const P = (a: string, b: string, answer: string, bMeaning: Problem["bMeaning"] = "bottles"): Problem => ({
   a, b, answer, bMeaning, unit: "mL", learningType: "d1xN",
@@ -74,8 +74,8 @@ test("형식 오류는 확정하지 않고 오답으로 세지 않음", () => {
   assert.equal(s.problemLog.length, 0);
 });
 
-test("젓기: 모든 재료 투입 전 차단, 누적 후 완료, 완료 후 더 늘지 않음, 젓기 전 병에 담기 차단", () => {
-  let s = startBrewing();
+test("젓기: 모든 재료 투입 전 차단, 누적 후 완료, 완료 후 더 늘지 않음, 젓기 전 병에 담기 차단 (이전 레시피 2재료)", () => {
+  let s = legacyBrewing();
   const o = order(s);
   s = reducer(s, { type: "STIR", orderId: o.id, amount: 25 });
   assert.equal(order(s).stirProgress, 0, "재료 넣기 전 젓기 불가");
@@ -109,8 +109,8 @@ test("젓기: 모든 재료 투입 전 차단, 누적 후 완료, 완료 후 더
   assert.equal(order(s).reward, order(s).price);
 });
 
-test("모든 제조 단계에서 저장 → 검증 통과 → 같은 상태 복구", () => {
-  let s = startBrewing(8);
+test("모든 제조 단계에서 저장 → 검증 통과 → 같은 상태 복구 (이전 레시피 2재료 주문을 마치는 하루)", () => {
+  let s = legacyBrewing(8);
   const o = order(s);
   const snaps = [s];
   s = reducer(s, { type: "PLACE_INGREDIENT", orderId: o.id, taskIndex: 1 });

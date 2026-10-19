@@ -1,4 +1,7 @@
 import { createInitialState, currentOrder, reducer, type Action } from "../src/game/reducer.ts";
+import { createOrderFromKey } from "../src/game/orderFactory.ts";
+import { RECIPES } from "../src/data/recipes.ts";
+import { createRng } from "../src/lib/rng.ts";
 import type { GameState, IngredientTask, Order, ShiftChoice } from "../src/game/types.ts";
 import type { InputKey } from "../src/lib/answerInput.ts";
 
@@ -110,4 +113,17 @@ export function playFullDay(start: GameState, opts: (i: number) => ServeOptions 
 export function closeAndNext(s: GameState, seed: number): GameState {
   const d = s.day!.dayNumber;
   return run(s, { type: "CLOSE_DAY", dayNumber: d, now: NOW }, { type: "NEXT_DAY", fromDay: d, seed });
+}
+
+/**
+ * 이전 버전 레시피(재료 2종) 주문으로 제조를 시작한다. 새 영업에는 이전 레시피가 나오지 않으므로,
+ * 저장 호환 규칙(진행 중이던 하루를 이전 주문 그대로 마치기)을 검사할 때 쓴다.
+ */
+export function legacyBrewing(seed = 42, key = "multiBottle:starlight:3"): GameState {
+  let s = run(createInitialState(), { type: "START", seed });
+  s = reducer(s, { type: "ACK_INTRO", dayNumber: s.day!.dayNumber });
+  const first = s.day!.orders[0];
+  const o: Order = { ...createOrderFromKey(key, { orderNumber: Number(first.id.replace("order-", "")), customerId: first.customerId, rng: createRng(seed), recipes: [RECIPES.starlight] }), status: "arrived" };
+  s = { ...s, day: { ...s.day!, orders: [o, ...s.day!.orders.slice(1)] } };
+  return reducer(s, { type: "ACCEPT_ORDER", orderId: o.id });
 }

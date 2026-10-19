@@ -13,6 +13,7 @@ import type { GameState, OrderKind, ShiftChoice, TaskMode } from "./types.ts";
 export const KIND_LABEL: Record<OrderKind, string> = {
   multiBottle: "여러 병",
   customMultiplier: "맞춤 배수",
+  customAmount: "손님 지정량",
   lifeItem: "생활 소재 특별",
   pointShift: "곱의 변화 비교",
 };

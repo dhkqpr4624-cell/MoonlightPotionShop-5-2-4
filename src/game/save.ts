@@ -17,6 +17,7 @@ import { migrateV1toV2, validateV2State } from "./legacy/v2save.ts";
 import type * as V2 from "./legacy/v2types.ts";
 import { shiftConcept, SHIFT_VARIANTS } from "./orderFactory.ts";
 import { qualityOf, rewardFor } from "./outcome.ts";
+import { freeIngredients, normalizeUnlocked, shopIngredients } from "./unlocks.ts";
 import { MAX_HINT_LEVEL } from "./reducer.ts";
 import {
   CUSTOMERS_PER_DAY,
@@ -30,7 +31,7 @@ import {
 
 export const SAVE_KEY = "moonlight-potion-shop/save";
 export const BACKUP_KEY_PREFIX = "moonlight-potion-shop/backup-";
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -57,7 +58,7 @@ const norm = (s: string) => toDecimalString(parseDecimal(s));
 
 const SCENES = ["title", "counter", "workbench", "closing"];
 const ORDER_STATUSES = ["queued", "arrived", "brewing", "bottled", "paid"];
-const KINDS = ["multiBottle", "customMultiplier", "lifeItem", "pointShift"];
+const KINDS = ["multiBottle", "customMultiplier", "customAmount", "lifeItem", "pointShift"];
 const MODES = ["calc", "specified", "concept"];
 const CHOICES = ["x10", "same", "d10"];
 const QUALITIES = ["great", "okay", "poor"];
@@ -68,7 +69,7 @@ function orderNumber(id: string): number | null {
 }
 
 /* ------------------------------------------------------------------ */
-/* 검증 (버전 3)                                                        */
+/* 검증 (버전 4 — 주문·하루 검사는 버전 3과 같고, 해금 목록이 더해짐)   */
 /* ------------------------------------------------------------------ */
 
 function validateTask(t: unknown, o: Obj, i: number, w: string): string[] {
@@ -93,13 +94,19 @@ function validateTask(t: unknown, o: Obj, i: number, w: string): string[] {
     if (p.learningType !== classifyProduct(p.a as string, p.b as string)) e.push(`${w}: 학습 유형이 문제와 맞지 않습니다.`);
     if (kind === "multiBottle" && (p.a !== ad.amount || p.b !== String(o.bottles))) e.push(`${w}: 레시피 기본량·병 수와 문제가 다릅니다.`);
     if (kind === "customMultiplier" && (p.a !== ad.amount || p.b !== o.multiplier)) e.push(`${w}: 레시피 기본량·배수와 문제가 다릅니다.`);
+    if (kind === "customAmount") {
+      const g = o.given as Obj;
+      if (!isObject(g) || p.a !== g.amount || p.b !== g.times || p.bMeaning !== (g.form === "perBottle" ? "bottles" : "multiplier")) {
+        e.push(`${w}: 손님 지정량과 문제가 다릅니다.`);
+      }
+    }
     if (kind === "lifeItem") {
       const life = o.life as Obj;
       if (!isObject(life) || p.a !== life.a || p.b !== life.b) e.push(`${w}: 생활 소재 조건과 문제가 다릅니다.`);
     }
     if (kind === "pointShift") e.push(`${w}: 비교 주문에는 계산 과제가 없습니다.`);
   } else if (t.mode === "specified") {
-    if (kind === "multiBottle" || kind === "customMultiplier") e.push(`${w}: 레시피 주문에는 지정량 과제가 없습니다.`);
+    if (kind === "multiBottle" || kind === "customMultiplier" || kind === "customAmount") e.push(`${w}: 레시피 주문에는 지정량 과제가 없습니다.`);
     if (p.answer !== norm(ad.amount) || p.learningType !== null) e.push(`${w}: 지정량이 레시피 기본량과 다릅니다.`);
   } else {
     const c = t.concept;
@@ -163,7 +170,15 @@ export function validateOrder(o: unknown, where: string): string[] {
   if (!recipe || e.length) return e;
 
   // 주문 유형별 조건
-  if (o.kind === "multiBottle") {
+  const given = o.given;
+  if (o.kind === "customAmount") {
+    const g = given as Obj;
+    const okShape = isObject(g) && (g.form === "perBottle" || g.form === "base") && isStr(g.amount) && isDecimalString(g.amount) && isStr(g.times) && isDecimalString(g.times);
+    if (!okShape || recipe.additives.length !== 1 || !classifyProduct(g.amount as string, g.times as string)) e.push(`${where}: 손님 지정량 정보가 올바르지 않습니다.`);
+    else if (g.form === "perBottle" && o.bottles !== Number(g.times)) e.push(`${where}: 손님 지정량 주문의 병 수가 맞지 않습니다.`);
+  } else if (!(given === undefined || given === null)) e.push(`${where}: 손님 지정량 정보가 필요 없는 주문입니다.`);
+  const perBottle = o.kind === "multiBottle" || (o.kind === "customAmount" && isObject(given) && given.form === "perBottle");
+  if (perBottle) {
     if (!isInt(o.bottles, 2, 99)) e.push(`${where}: 병 수가 올바르지 않습니다.`);
     if (o.price !== recipe.pricePerBottle * (o.bottles as number)) e.push(`${where}: 판매가가 레시피 가격과 맞지 않습니다.`);
   } else {
@@ -346,6 +361,11 @@ export function validateState(data: unknown): { ok: true; state: GameState } | {
     const ids = (data.orderLog as Obj[]).map((x) => (isObject(x) ? x.orderId : null));
     if (new Set(ids).size !== ids.length) errors.push("같은 주문 결과가 두 번 있습니다.");
   }
+  const shopIds = new Set(shopIngredients().map((i) => i.id));
+  const ul = data.unlockedIngredients;
+  if (!isStrArray(ul) || new Set(ul).size !== ul.length || !ul.every((id) => shopIds.has(id)) || !freeIngredients().every((id) => ul.includes(id))) {
+    errors.push("해금한 재료 목록이 올바르지 않습니다.");
+  }
   if (!Array.isArray(data.dayHistory)) errors.push("지난 영업 결과가 목록이 아닙니다.");
   else {
     data.dayHistory.forEach((h, i) => {
@@ -425,7 +445,10 @@ function convertV2Order(o: V2.Order): Order {
  * - Phase 1·2 학습 기록: legacyRecords로 보존 (새 문제 기록과 구분)
  * - 유형 소개 단계: 0(①②)에서 시작 → 다음 영업부터 ③④ … 순서대로 소개 (일차가 높아도 건너뛰지 않음)
  */
-export function migrateV2toV3(v2: V2.GameState): GameState {
+/** 버전 3 모양 (해금 목록이 없음) */
+export type V3GameState = Omit<GameState, "saveVersion" | "unlockedIngredients"> & { saveVersion: 3 };
+
+export function migrateV2toV3(v2: V2.GameState): V3GameState {
   let day: DayState | null = null;
   let activeTask: number | null = null;
   const orderLog: OrderOutcome[] = [];
@@ -467,6 +490,17 @@ export function migrateV2toV3(v2: V2.GameState): GameState {
   };
 }
 
+/**
+ * 버전 3 → 4 (기력 포션·재료 해금 버전)
+ * - 돈·일차·마감한 영업·학습 기록·복습·지급 기록·주문 결과: 그대로 (지어내는 기록 없음)
+ * - 해금 목록 추가: 무료 재료(기력초)만. 구매 내역은 만들지 않는다.
+ * - 진행 중이던 하루의 주문(별빛·용기·새싹·안개 등)은 그대로 두고 원래 규칙으로 마친다. 다음 영업부터 기력 포션 주문만 나온다.
+ * - 덱: 그대로 둔다. 이전 레시피 키는 새 후보에 없으므로 덱에서 자동으로 버려진다(lib/deck.ts).
+ */
+export function migrateV3toV4(v3: Obj): Obj {
+  return { ...v3, saveVersion: 4, unlockedIngredients: normalizeUnlocked([]) };
+}
+
 /* ------------------------------------------------------------------ */
 /* 해석(버전 판별) · 불러오기 · 저장                                     */
 /* ------------------------------------------------------------------ */
@@ -482,6 +516,11 @@ export function interpretSaveData(data: unknown, seed: number): InterpretResult 
     const r = validateState(data);
     return r.ok ? { ok: true, state: r.state, migratedFrom: null } : { ok: false, kind: "invalid", errors: r.errors };
   }
+  if (v === 3) {
+    // 옮긴 사실을 처음 화면에서 알려 주도록 타이틀에서 시작 (이어하기를 누르면 그 화면으로 돌아간다: 제조 진행은 그대로)
+    const r = validateState({ ...migrateV3toV4(data), scene: "title" });
+    return r.ok ? { ok: true, state: r.state, migratedFrom: 3 } : { ok: false, kind: "invalid", errors: r.errors };
+  }
   if (v === 1 || v === 2) {
     let v2: V2.GameState;
     if (v === 1) {
@@ -493,7 +532,7 @@ export function interpretSaveData(data: unknown, seed: number): InterpretResult 
       if (!r2.ok) return { ok: false, kind: "invalid", errors: r2.errors };
       v2 = r2.state;
     }
-    const migrated = { ...migrateV2toV3(v2), scene: "title" as const };
+    const migrated = migrateV3toV4({ ...migrateV2toV3(v2), scene: "title" as const } as unknown as Obj);
     const r3 = validateState(migrated);
     if (!r3.ok) return { ok: false, kind: "invalid", errors: [`Phase ${v} 저장을 옮기는 중 문제가 생겼습니다.`, ...r3.errors] };
     return { ok: true, state: r3.state, migratedFrom: v };

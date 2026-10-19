@@ -84,7 +84,8 @@ test("Phase 1 저장 → v2 → v3 마이그레이션: 진행 중 주문은 Phas
   const s = l.state;
   assert.equal(l.migratedFrom, 1);
   assert.equal(store.mem.get(`${BACKUP_KEY_PREFIX}v1`), raw);
-  assert.equal(s.saveVersion, 3);
+  assert.equal(s.saveVersion, 4);
+  assert.deepEqual(s.unlockedIngredients, ["energyHerb"]);
   assert.equal(s.money, v1.money);
   assert.equal(s.legacyRecords.length, v1.records.length);
   assert.equal(s.day!.rules, 2);

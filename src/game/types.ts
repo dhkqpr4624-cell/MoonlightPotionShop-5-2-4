@@ -5,8 +5,16 @@ import type { DeckState } from "../lib/deck.ts";
 
 export type { Quality } from "../data/customers.ts";
 
-/** 주문 유형 */
-export type OrderKind = "multiBottle" | "customMultiplier" | "lifeItem" | "pointShift";
+/**
+ * 주문 유형
+ *  multiBottle:      레시피 1병당 양 × 병 수
+ *  customMultiplier: 레시피 기본량 × 배수 (1병)
+ *  customAmount:     손님 지정량 주문. 레시피 대신 손님이 정한 양을 쓴다
+ *                    (1병당 양 × 병 수, 또는 손님이 알려 준 기준 양 × 배수)
+ *  lifeItem:         생활 소재 특별 주문
+ *  pointShift:       ⑦ 곱의 변화 비교
+ */
+export type OrderKind = "multiBottle" | "customMultiplier" | "customAmount" | "lifeItem" | "pointShift";
 
 /**
  * 규칙 버전
@@ -52,6 +60,17 @@ export interface ConceptData {
   newA: string;
   newB: string;
   correct: ShiftChoice;
+}
+
+/**
+ * 손님 지정량 주문 데이터
+ *  form "perBottle": 1병에 amount씩 × times병
+ *  form "base":      손님이 알려 준 기준 양 amount의 times배 (1병)
+ */
+export interface GivenAmount {
+  form: "perBottle" | "base";
+  amount: string;
+  times: string;
 }
 
 /** 생활 소재 특별 주문 데이터 */
@@ -133,6 +152,8 @@ export interface Order {
   bottles: number;
   /** 맞춤 배수 주문의 배수 */
   multiplier: string | null;
+  /** 손님 지정량 주문(customAmount)의 조건. 그 밖의 주문에는 없다 */
+  given?: GivenAmount | null;
   life: LifeData | null;
   tasks: IngredientTask[];
   autoAdditions: AutoAddition[];
@@ -300,7 +321,7 @@ export interface DaySummary {
 export const CUSTOMERS_PER_DAY = 5;
 
 export interface GameState {
-  saveVersion: 3;
+  saveVersion: 4;
   scene: Scene;
   money: number;
   nextOrderNumber: number;
@@ -321,4 +342,6 @@ export interface GameState {
   dayHistory: DaySummary[];
   stats: { ordersCompleted: number; potionsSold: number; problemsSolved: number };
   paidOrderIds: string[];
+  /** 해금한 재료 ID (저장 버전 4부터). 레시피 사용 가능 여부는 여기서 계산한다 (game/unlocks.ts) */
+  unlockedIngredients: string[];
 }

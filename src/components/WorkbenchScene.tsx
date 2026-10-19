@@ -1,20 +1,29 @@
 /**
- * 제조대 (Phase 4). 가운데 큰 솥, 아래 나무 작업대 위 재료 용기, 한쪽에 접는 주문 메모·레시피북, 다른 쪽에 계량·해설 패널.
+ * 제작대 (탑뷰, PNG 배경 한 장).
+ *
+ * 화면 구성
+ *  - 배경: public/assets/shop/workbench/table.png 를 자르거나 늘리지 않고 장면 상자 안에 통째로 맞춘다(바깥은 단색 여백).
+ *  - 모든 물건·클릭 영역은 PNG 픽셀 좌표(data/shopArt.ts WORKBENCH_SCENE)로 정하고, 같은 함수(rect)로 화면 좌표로 바꾼다.
+ *    포인터 좌표도 같은 장면 좌표로 거꾸로 바꿔서(toCanvas) 판정하므로, 여백이 생겨도 그림과 클릭 영역이 어긋나지 않는다.
+ *  - 맨 왼쪽 위 서랍: 기력초 더미 / 가운데 항아리: 물약(SVG, 항아리 안쪽 타원으로 잘라 냄)과 젓는 막대
+ *  - 왼쪽 아래 레시피북, 오른쪽 아래 주문서 → 책 모양 팝업 (BookPopup)
+ *  - 계량 패널: 넓은 화면은 항아리와 주문서 사이(병 받침 위)에 겹쳐서, 세로 화면은 제작대 아래에
  *
  * 재료 옮기기 (같은 게임 행동 PLACE_INGREDIENT)
- *  ① 재료 클릭(집기) → 솥 클릭(놓기)   ② 재료를 끌어서 솥에 놓기   ③ 키보드 Enter·Tab·Enter, Esc 취소
- *  솥이 아닌 곳에 놓으면 재료는 선반으로 돌아간다.
+ *  ① 서랍 클릭(집기) → 항아리 클릭   ② 서랍에서 끌어서 항아리에 놓기   ③ 키보드 Enter·Tab·Enter, Esc 취소
+ *  항아리 밖에 놓으면 아무 상태도 바뀌지 않는다. 서랍의 재료는 줄어들지 않는다(무제한 공급원).
  *
- * 젓기 (버튼 없음): 막대(또는 솥 안 액체)를 잡고 움직인다.
- *  - 이동량은 솥 액체 크기로 정규화해 누적한다(StirTracker). 프레임 수·화면 크기와 무관.
- *  - pointer capture로 한 손가락만 추적. 놓기·취소·포인터 잃음·창 포커스 잃음·화면 숨김에 젓기 종료.
- *  - 막대 위치·소용돌이는 ref로 직접 바꿔 드래그 중 화면 전체가 다시 그려지지 않는다.
- *  - 키보드: 솥에 초점을 두고 ←/→ 로 막대를 좌우로 옮긴다(실제로 움직인 만큼 진행).
+ * 젓기 (버튼 없음): 막대(또는 항아리 안 액체)를 잡고 움직인다. 이동량은 액체 크기로 정규화해 누적한다(StirTracker).
+ *  pointer capture로 한 손가락만, 놓기·취소·포인터 잃음·창 포커스 잃음·화면 숨김·팝업 열림에 젓기 종료.
+ *  막대·소용돌이는 ref로 직접 바꿔 드래그 중 화면 전체가 다시 그려지지 않는다. 키보드: 항아리에 초점 → ←/→.
  */
-import { useCallback, useEffect, useRef, useState, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { getIngredient } from "../data/ingredients.ts";
+import {
+  useCallback, useEffect, useLayoutEffect, useRef, useState,
+  type CSSProperties, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject,
+} from "react";
+import { getIngredient, type Ingredient } from "../data/ingredients.ts";
 import { getRecipe } from "../data/recipes.ts";
-import { SHOP_ART } from "../data/shopArt.ts";
+import { WORKBENCH_SCENE as WB } from "../data/shopArt.ts";
 import { keyFromKeyboard } from "../lib/answerInput.ts";
 import { assetUrl } from "../lib/assets.ts";
 import { playSfx, startStir, stopStir, updateStir } from "../audio/sfx.ts";
@@ -23,13 +32,64 @@ import { clampTip, KEY_STEP, StirTracker, type Point } from "../game/stirInput.t
 import { STIR_TARGET, type GameState, type Order, type PourEvent } from "../game/types.ts";
 import { Icon } from "./Icon.tsx";
 import { MeasurePanel } from "./MeasurePanel.tsx";
-import { Cauldron, CAULDRON_VIEWBOX, IngredientArt, LIQUID, PotionBottle } from "./art/PotionArt.tsx";
+import { BookPopup, type BookKind } from "./BookPopup.tsx";
+import { IngredientArt, PotionBottle } from "./art/PotionArt.tsx";
+import { EnergyHerbPile } from "./art/HerbArt.tsx";
 
 export const POUR_MS = 1200;
 export const BOTTLE_MS = 1600;
 const DRAG_THRESHOLD = 8;
-/** 손 움직임을 받는 세로 반지름 (액체 타원은 납작하지만 손은 더 크게 위아래로 움직인다) */
-const HAND_RY = LIQUID.rx * 0.55;
+
+/** 액체 수면 (항아리 안쪽 타원보다 조금 작게: 안쪽 벽이 보이게) */
+const POT = WB.pot.inner;
+const LIQ = { cx: POT.cx, cy: POT.cy + 10, rx: POT.rx - 14, ry: POT.ry - 14 };
+const RIM = WB.pot.rim;
+
+interface Box { x: number; y: number; width: number; height: number }
+
+/* ---------------- 장면 배치 ---------------- */
+interface BenchLayout {
+  s: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  /** 세로 화면: 제작대 아래에 패널 자리 */
+  stacked: boolean;
+  dockTop: number;
+}
+
+const DOCK_MIN = 240;
+
+function computeBench(w: number, h: number): BenchLayout {
+  const s = Math.max(0.05, Math.min(w / WB.width, h / WB.height));
+  const cw = WB.width * s;
+  const ch = WB.height * s;
+  const stacked = h - ch >= DOCK_MIN;
+  const top = stacked ? 0 : (h - ch) / 2;
+  return { s, left: (w - cw) / 2, top, width: w, height: h, stacked, dockTop: top + ch };
+}
+
+function useBenchLayout(ref: RefObject<HTMLDivElement | null>): BenchLayout {
+  const [l, setL] = useState<BenchLayout>(() => computeBench(typeof window !== "undefined" ? window.innerWidth : 1180, typeof window !== "undefined" ? window.innerHeight - 130 : 640));
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const next = computeBench(el.clientWidth, el.clientHeight);
+      setL((p) => (Math.abs(p.s - next.s) < 0.0005 && Math.abs(p.width - next.width) < 0.5 && Math.abs(p.height - next.height) < 0.5 ? p : next));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return l;
+}
 
 interface DragInfo {
   index: number;
@@ -47,6 +107,24 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
   const active = state.activeTask;
   const activeTask = active !== null ? order.tasks[active] : null;
 
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const L = useBenchLayout(stageRef);
+  /** 캔버스 좌표 상자 → 화면(장면 상자 기준) 스타일 */
+  const rect = (b: Box): CSSProperties => ({ left: L.left + b.x * L.s, top: L.top + b.y * L.s, width: b.width * L.s, height: b.height * L.s });
+  /** 화면 좌표(client) → 캔버스 좌표 */
+  const toCanvas = (clientX: number, clientY: number): Point | null => {
+    const r = stageRef.current?.getBoundingClientRect();
+    if (!r || L.s <= 0) return null;
+    return { x: (clientX - r.left - L.left) / L.s, y: (clientY - r.top - L.top) / L.s };
+  };
+  const inRim = (p: Point | null) => !!p && ((p.x - RIM.cx) / RIM.rx) ** 2 + ((p.y - RIM.cy) / RIM.ry) ** 2 <= 1;
+
+  /* ---------------- 팝업 (레시피·주문서) ---------------- */
+  const [popup, setPopup] = useState<BookKind | null>(null);
+  const bookBtn = useRef<HTMLButtonElement | null>(null);
+  const clipBtn = useRef<HTMLButtonElement | null>(null);
+  const popupOpen = popup !== null;
+
   /* ---------------- 연출 (화면 효과일 뿐, 진행은 저장 상태가 결정) ---------------- */
   const [pourAnim, setPourAnim] = useState<PourEvent | null>(null);
   const seenSeq = useRef(state.pour?.seq ?? 0);
@@ -54,7 +132,8 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
     if (state.pour && state.pour.seq !== seenSeq.current) {
       seenSeq.current = state.pour.seq;
       setPourAnim(state.pour);
-      playSfx(getIngredient(state.pour.ingredientId).kind === "powder" ? "pourPowder" : "pourLiquid");
+      const kind = getIngredient(state.pour.ingredientId).kind;
+      playSfx(kind === "liquid" ? "pourLiquid" : "pourPowder");
       const t = window.setTimeout(() => setPourAnim(null), POUR_MS);
       return () => window.clearTimeout(t);
     }
@@ -85,10 +164,6 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
 
   const busy = bottling;
 
-  /* ---------------- 메모·레시피북 접기 ---------------- */
-  const [notesOpen, setNotesOpen] = useState(() => (typeof window !== "undefined" ? window.innerWidth >= 1100 : true));
-  const [notesTab, setNotesTab] = useState<"memo" | "recipe">("memo");
-
   /* ---------------- 재료 집기·끌기 ---------------- */
   const [picked, setPicked] = useState<number | null>(null);
   const [drag, setDrag] = useState<DragInfo | null>(null);
@@ -96,12 +171,11 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
   const ghostRef = useRef<HTMLDivElement | null>(null);
   const [bounce, setBounce] = useState<number | null>(null);
   const suppressClick = useRef(false);
-  const zoneRef = useRef<HTMLDivElement | null>(null);
-  const canPlace = brewing && active === null && !busy;
+  const canPlace = brewing && active === null && !busy && !popupOpen;
 
   useEffect(() => {
-    if (!canPlace) setPicked(null);
-  }, [canPlace]);
+    if (!brewing || active !== null || busy) setPicked(null);
+  }, [brewing, active, busy]);
   useEffect(() => {
     if (bounce === null) return;
     const t = window.setTimeout(() => setBounce(null), 450);
@@ -117,22 +191,21 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
     [dispatch, order.id],
   );
 
-  const overCauldron = (x: number, y: number) => {
-    const r = zoneRef.current?.getBoundingClientRect();
-    return !!r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-  };
-
   const moveGhost = (x: number, y: number) => {
     if (ghostRef.current) ghostRef.current.style.transform = `translate(${x}px, ${y}px)`;
   };
-  const endDrag = () => {
+  const endDrag = useCallback(() => {
     dragRef.current = null;
     setDrag(null);
-  };
+  }, []);
   const onJarPointerDown = (e: ReactPointerEvent<HTMLButtonElement>, index: number) => {
     suppressClick.current = false;
-    if (!canPlace || order.tasks[index].status !== "pending" || dragRef.current) return;
-    e.currentTarget.setPointerCapture?.(e.pointerId);
+    if (!canPlace || order.tasks[index].status !== "pending" || dragRef.current) return; // 두 번째 손가락은 무시
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* 무시 */
+    }
     dragRef.current = { index, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, active: false };
   };
   const onJarPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
@@ -143,16 +216,25 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
       setDrag({ ...d });
       playSfx("pick");
     }
-    if (d.active) moveGhost(e.clientX, e.clientY);
+    if (d.active) {
+      moveGhost(e.clientX, e.clientY);
+      setOverPot(inRim(toCanvas(e.clientX, e.clientY)));
+    }
   };
+  const [overPot, setOverPot] = useState(false);
   const onJarPointerUp = (e: ReactPointerEvent<HTMLButtonElement>) => {
     const d = dragRef.current;
     if (!d || e.pointerId !== d.pointerId) return;
     if (d.active) {
-      suppressClick.current = true;
-      if (overCauldron(e.clientX, e.clientY)) place(d.index);
-      else setBounce(d.index); // 잘못된 곳 → 선반으로 돌아감
+      suppressClick.current = true; // 드래그 뒤에 따라오는 click은 한 번 무시
+      if (canPlace && inRim(toCanvas(e.clientX, e.clientY))) place(d.index);
+      else setBounce(d.index); // 항아리 밖 → 서랍으로 돌아감(상태 변화 없음)
     }
+    setOverPot(false);
+    endDrag();
+  };
+  const onJarPointerCancel = () => {
+    setOverPot(false);
     endDrag();
   };
   useEffect(() => {
@@ -168,25 +250,27 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
   };
 
   /* ---------------- 젓기 ---------------- */
-  const stirMode = brewing && allDone && !stirred && active === null && !busy;
+  const stirMode = brewing && allDone && !stirred && active === null && !busy && !popupOpen;
   const tracker = useRef(new StirTracker());
   const stickRef = useRef<SVGGElement | null>(null);
   const swirlRef = useRef<SVGGElement | null>(null);
+  const rippleRef = useRef<SVGGElement | null>(null);
   const swirlAngle = useRef(0);
   const [holding, setHolding] = useState(false);
   const orderIdRef = useRef(order.id);
   orderIdRef.current = order.id;
 
   const drawStick = useCallback((tip: Point) => {
-    const x = LIQUID.cx + tip.x * LIQUID.rx;
-    const y = LIQUID.cy + tip.y * LIQUID.ry;
-    stickRef.current?.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
-    stickRef.current?.querySelector(".stir-stick-body")?.setAttribute("transform", `rotate(${(tip.x * 16).toFixed(1)})`);
-    swirlRef.current?.setAttribute("transform", `rotate(${swirlAngle.current.toFixed(1)})`);
+    const x = LIQ.cx + tip.x * LIQ.rx;
+    const y = LIQ.cy + tip.y * LIQ.ry;
+    // 막대는 끝이 액체에 잠기고 손잡이는 항아리 오른쪽 위 테두리 너머로 걸친다. 끝이 움직이면 기울기만 조금 바뀐다
+    const ang = -32 + tip.x * 10 + tip.y * 6;
+    stickRef.current?.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${ang.toFixed(1)})`);
+    rippleRef.current?.setAttribute("transform", `translate(${x.toFixed(1)} ${y.toFixed(1)})`);
+    swirlRef.current?.setAttribute("transform", `rotate(${swirlAngle.current.toFixed(1)} ${LIQ.cx} ${LIQ.cy})`);
   }, []);
 
   useEffect(() => {
-    // 막대가 처음 보일 때 기본 위치
     if (stickRef.current) drawStick(tracker.current.tip);
   });
 
@@ -203,13 +287,9 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
   );
 
   const toTip = (clientX: number, clientY: number): Point | null => {
-    const svg = zoneRef.current?.querySelector("svg.cauldron");
-    const r = svg?.getBoundingClientRect();
-    if (!r || r.width === 0) return null;
-    const v = CAULDRON_VIEWBOX;
-    const sx = v.x + ((clientX - r.left) / r.width) * v.w;
-    const sy = v.y + ((clientY - r.top) / r.height) * v.h;
-    return { x: (sx - LIQUID.cx) / LIQUID.rx, y: (sy - LIQUID.cy) / HAND_RY };
+    const c = toCanvas(clientX, clientY);
+    if (!c) return null;
+    return { x: (c.x - LIQ.cx) / LIQ.rx, y: (c.y - LIQ.cy) / LIQ.ry };
   };
 
   const finishStir = useCallback(
@@ -273,10 +353,23 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
       stopStir();
     };
   }, [finishStir]);
-  // 젓기가 끝나면(완료·다른 단계) 잡고 있던 것을 놓는다
+  // 젓기가 끝나면(완료·다른 단계·팝업 열림) 잡고 있던 것을 놓는다
   useEffect(() => {
     if (!stirMode) finishStir();
   }, [stirMode, finishStir]);
+
+  const openPopup = (kind: BookKind) => {
+    // 끌던 재료·잡던 막대를 안전하게 놓는다 (제조 상태는 바뀌지 않음)
+    finishStir();
+    setOverPot(false);
+    endDrag();
+    setPopup(kind);
+  };
+  const closePopup = () => {
+    const kind = popup;
+    setPopup(null);
+    window.setTimeout(() => (kind === "recipe" ? bookBtn.current : clipBtn.current)?.focus(), 0);
+  };
 
   const onZoneKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     if (!stirMode || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
@@ -298,11 +391,12 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
   };
 
   /* ---------------- 키보드: 숫자 입력, Esc ---------------- */
-  const latest = useRef({ activeTask, picked, busy });
-  latest.current = { activeTask, picked, busy };
+  const latest = useRef({ activeTask, picked, busy, popupOpen });
+  latest.current = { activeTask, picked, busy, popupOpen };
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      const { activeTask: t, picked: p, busy: b } = latest.current;
+      const { activeTask: t, picked: p, busy: b, popupOpen: po } = latest.current;
+      if (po) return; // 팝업이 열려 있으면 팝업이 키를 받는다
       if (e.altKey || e.ctrlKey || e.metaKey) return;
       if (e.key === "Escape" && p !== null) {
         setPicked(null);
@@ -328,31 +422,79 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
   }, [dispatch]);
 
   /* ---------------- 표시 ---------------- */
-  const doneColors = order.tasks.filter((t) => t.status === "done").map((t) => getIngredient(t.ingredientId).color);
+  const doneIngs = order.tasks.filter((t) => t.status === "done").map((t) => getIngredient(t.ingredientId));
   const stir = order.stirProgress / STIR_TARGET;
+  const baseColor = "#7fb6c4";
+  // 기본 용액(옅은 청록) → 재료를 넣으면 재료 색이 섞이고 → 저을수록 완성 빛깔로
+  const mixed = doneIngs.reduce((c, ing, i) => blend(c, ing.color, i === 0 ? 0.7 : 0.5), baseColor);
+  const liquidColor = !brewing || stirred ? recipe.look.liquid : stir > 0 ? blend(mixed, recipe.look.liquid, stir) : mixed;
   const step = !brewing ? "bottled" : active !== null ? "measure" : !allDone ? "place" : !stirred ? "stir" : "bottle";
-  const pickedName = picked !== null ? getIngredient(order.tasks[picked].ingredientId).name : "";
+  const pickedIng = picked !== null ? getIngredient(order.tasks[picked].ingredientId) : null;
   const instruction: Record<string, string> = {
-    place: picked !== null ? `${pickedName}를 집었어요. 솥을 눌러 넣어요.` : "재료를 눌러 집고 솥을 누르거나, 재료를 솥으로 끌어다 놓아요.",
-    measure: "계량 패널에서 양을 정해요.",
+    place: pickedIng ? `${pickedIng.name}를 집었어요. 항아리를 눌러 넣어요.` : "서랍의 재료를 눌러 집고 항아리를 누르거나, 재료를 항아리로 끌어다 놓아요.",
+    measure: "계량 패널에서 양을 정해요. 레시피북과 주문서를 다시 볼 수 있어요.",
     stir: "막대를 잡고 움직여 포션을 저어 주세요.",
     bottle: "다 저었어요! 병에 담아요.",
     bottled: bottling ? "병에 담는 중…" : "포션 완성! 창구로 가져가요.",
   };
   const pourIng = pourAnim ? getIngredient(pourAnim.ingredientId) : null;
   const showStick = brewing && allDone;
+  const targeting = canPlace && (picked !== null || !!drag?.active);
+  const sceneBox: Box = { x: 0, y: 0, width: WB.width, height: WB.height };
+  const panelStyle: CSSProperties = L.stacked
+    ? { left: 8, right: 8, top: L.dockTop + 8, bottom: 8 }
+    : (() => {
+        const left0 = L.left + 975 * L.s;
+        const width = Math.max(320, 500 * L.s);
+        return { left: Math.max(8, Math.min(left0, L.left + 1475 * L.s - width)), width, top: L.top + 14 * L.s, height: Math.max(260, 912 * L.s) };
+      })();
+
+  const actions = (
+    <>
+      {brewing && stirred && (
+        <button
+          type="button"
+          className="btn btn-gold btn-big"
+          onClick={() => {
+            dispatch({ type: "COMPLETE_POTION", orderId: order.id });
+            setBottling(true);
+          }}
+          disabled={busy || popupOpen}
+          data-testid="complete"
+          data-sfx="bottle"
+        >
+          <Icon name="potion" /> 병에 담기
+        </button>
+      )}
+      {!brewing && (
+        <button type="button" className="btn btn-primary btn-big" disabled={bottling || popupOpen} onClick={() => dispatch({ type: "GO_COUNTER" })} data-testid="to-counter">
+          창구로 가져가기 <Icon name="arrow" />
+        </button>
+      )}
+      {state.feedback && active === null && <p className="station-notice" role="status">{state.feedback.title}</p>}
+    </>
+  );
+  const meter = brewing && allDone && !stirred && (
+    <div className="stir-status">
+      <div className="stir-meter" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={order.stirProgress} aria-label="젓기 진행" data-testid="stir-meter">
+        <span style={{ width: `${order.stirProgress}%` }} />
+      </div>
+      <span className="stir-pct">{order.stirProgress}%</span>
+    </div>
+  );
 
   return (
-    <div className={`bench ${notesOpen ? "notes-open" : ""} ${active !== null ? "measuring" : ""}`}>
+    <div className={`bench bench--top ${active !== null ? "measuring" : ""}`}>
       <header className="bench-bar" aria-label="주문 요약">
-        <button type="button" className="btn btn-quiet notes-toggle" onClick={() => setNotesOpen((v) => !v)} aria-expanded={notesOpen} data-testid="notes-toggle" data-sfx="page">
-          <Icon name="memo" size={20} /> {notesOpen ? "메모 접기" : "주문 메모·레시피"}
-        </button>
         <div className="bench-order">
           <PotionBottle look={recipe.look} size={28} />
           <span data-testid="order-title">{order.script.memo[0].replace("포션: ", "")}</span>
           {order.rules === 2 && <span className="badge badge-plain">이전 규칙</span>}
+          {recipe.legacy && <span className="badge badge-plain">이전 레시피</span>}
         </div>
+        <p className="bench-hint" role="status" data-testid="instruction">
+          {step === "stir" && <Icon name="hand" size={18} />} {instruction[step]}
+        </p>
         <ol className="steps" aria-label="제조 단계">
           {order.tasks.map((t) => (
             <StepChip key={t.problemId} done={t.status === "done"} label={getIngredient(t.ingredientId).name} />
@@ -360,236 +502,280 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
           <StepChip done={stirred} label="젓기" />
           <StepChip done={!brewing} label="병에 담기" />
         </ol>
-        <button type="button" className="btn btn-quiet" onClick={() => dispatch({ type: "GO_COUNTER" })} disabled={busy || active !== null} data-testid="to-counter-peek">
+        <button type="button" className="btn btn-quiet" onClick={() => dispatch({ type: "GO_COUNTER" })} disabled={busy || active !== null || popupOpen} data-testid="to-counter-peek">
           창구 보기
         </button>
       </header>
 
-      <div className="bench-body">
-        {notesOpen && (
-          <aside className="notes" aria-label="주문 메모와 레시피북" data-testid="notes">
-            <div className="tabs" role="tablist">
-              <button type="button" role="tab" aria-selected={notesTab === "memo"} className={notesTab === "memo" ? "is-on" : ""} onClick={() => setNotesTab("memo")} data-sfx="page">
-                <Icon name="memo" size={18} /> 주문 메모
-              </button>
-              <button type="button" role="tab" aria-selected={notesTab === "recipe"} className={notesTab === "recipe" ? "is-on" : ""} onClick={() => setNotesTab("recipe")} data-testid="tab-recipe" data-sfx="page">
-                <Icon name="book" size={18} /> 레시피북
-              </button>
-            </div>
-            {notesTab === "memo" ? (
-              <div className="notes-body memo-paper" data-testid="memo">
-                <ul className="memo-list">
-                  {order.script.memo.map((m, i) => <li key={i}>{m}</li>)}
-                </ul>
-                <div className="memo-quote">
-                  <span className="memo-label">손님이 한 말</span>
-                  <p>“{order.script.original}”</p>
-                  {order.askCount > 0 && (
-                    <>
-                      <span className="memo-label">쉬운 설명</span>
-                      <p>{order.script.easy}</p>
-                    </>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="notes-body book-paper" data-testid="recipe">
-                <div className="recipe-name">
-                  <PotionBottle look={recipe.look} size={30} /> {recipe.name} <span className="muted">1병당</span>
-                </div>
-                <table className="recipe-table">
-                  <tbody>
-                    <tr className="auto-row">
-                      <th>{recipe.baseSolution.name}</th>
-                      <td>{recipe.baseSolution.amountMl}mL</td>
-                      <td className="muted">자동</td>
-                    </tr>
-                    {recipe.additives.map((ad) => {
-                      const ing = getIngredient(ad.ingredientId);
-                      return (
-                        <tr key={ad.ingredientId}>
-                          <th>{ing.name}</th>
-                          <td data-testid={`recipe-${ad.ingredientId}`}>{ad.amount}{ing.unit}</td>
-                          <td className="muted">첨가물</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                <p className="recipe-note">첨가물은 기본 용액에 섞는 마법 재료예요. 첨가물을 더한 양이 병 전체의 양은 아니에요.</p>
-                <p className="recipe-note">이번 주문의 기본 용액: {order.autoAdditions.map((a) => `${a.amount}${a.unit} (${a.note})`).join(", ")}</p>
-              </div>
+      <div className={`bench-stage ${L.stacked ? "is-stacked" : ""}`} ref={stageRef} data-testid="bench-stage">
+        <img className="bench-table" src={assetUrl(WB.table)} alt="" draggable={false} style={rect(sceneBox)} data-testid="bench-table" />
+
+        {/* 항아리 안 물약 (장면 좌표 SVG, 항아리 안쪽 타원으로 잘라 냄) */}
+        <svg className="pot-fx" viewBox={`0 0 ${WB.width} ${WB.height}`} style={rect(sceneBox)} aria-hidden="true">
+          <defs>
+            <clipPath id="pot-inner">
+              <ellipse cx={POT.cx} cy={POT.cy} rx={POT.rx} ry={POT.ry} />
+            </clipPath>
+            <radialGradient id="liq-grad" cx="0.42" cy="0.38" r="0.7">
+              <stop offset="0" stopColor="#ffffff" stopOpacity="0.32" />
+              <stop offset="0.45" stopColor="#ffffff" stopOpacity="0.06" />
+              <stop offset="1" stopColor="#001a14" stopOpacity="0.34" />
+            </radialGradient>
+            <radialGradient id="liq-burst" cx="0.5" cy="0.5" r="0.5">
+              <stop offset="0" stopColor={recipe.look.glow} stopOpacity="0.9" />
+              <stop offset="1" stopColor={recipe.look.glow} stopOpacity="0" />
+            </radialGradient>
+          </defs>
+          <g clipPath="url(#pot-inner)">
+            <ellipse cx={LIQ.cx} cy={LIQ.cy} rx={LIQ.rx} ry={LIQ.ry} fill={liquidColor} opacity={doneIngs.length ? 0.9 : 0.62} className="liq-body" data-testid="pot-liquid" data-color={liquidColor} />
+            <ellipse cx={LIQ.cx} cy={LIQ.cy} rx={LIQ.rx} ry={LIQ.ry} fill="url(#liq-grad)" />
+            <g ref={swirlRef} className={`liq-swirl ${holding ? "is-holding" : ""}`} opacity={0.25 + stir * 0.45}>
+              {[0.86, 0.64, 0.42, 0.22].map((r, i) => (
+                <path key={i} d={spiralArc(r, i)} fill="none" stroke={recipe.look.glow} strokeWidth={6 - i} strokeLinecap="round" opacity={0.55 - i * 0.08} />
+              ))}
+            </g>
+            {/* 작은 입자 (개수 고정) */}
+            {Array.from({ length: 7 }, (_, i) => (
+              <circle key={i} className="liq-mote" style={{ animationDelay: `${i * 0.55}s` }} cx={LIQ.cx + Math.cos(i * 2.1) * LIQ.rx * 0.55} cy={LIQ.cy + Math.sin(i * 2.1) * LIQ.ry * 0.5} r={4 + (i % 3)} fill={recipe.look.glow} opacity={0.15 + stir * 0.5} />
+            ))}
+            {pourAnim && (
+              <g key={pourAnim.seq} className="liq-drop-ripple">
+                <ellipse cx={LIQ.cx} cy={LIQ.cy} rx={30} ry={26} fill="none" stroke="#e8fff2" strokeWidth={5} />
+                <ellipse cx={LIQ.cx} cy={LIQ.cy} rx={30} ry={26} fill="none" stroke="#e8fff2" strokeWidth={3} style={{ animationDelay: "0.25s" }} />
+              </g>
             )}
-          </aside>
+            {showStick && (
+              <g ref={rippleRef}>
+                <ellipse className={`stick-ripple ${holding ? "is-on" : ""}`} rx={34} ry={30} fill="none" stroke="#e8fff2" strokeWidth={3} />
+              </g>
+            )}
+            {burst && <ellipse className="liq-burst" cx={LIQ.cx} cy={LIQ.cy} rx={LIQ.rx} ry={LIQ.ry} fill="url(#liq-burst)" />}
+          </g>
+          {targeting && (
+            <ellipse className={`pot-target ${overPot ? "is-over" : ""}`} cx={RIM.cx} cy={RIM.cy} rx={POT.rx + 30} ry={POT.ry + 28} fill="none" />
+          )}
+          {showStick && (
+            <g ref={stickRef} className="stir-stick">
+              {/* 탑뷰 젓는 막대: 끝(원점)은 액체 속, 손잡이는 위쪽으로 뻗는다 */}
+              <path d="M-9 4 C -9 -60, -11 -200, -8 -300 L 8 -300 C 11 -200, 9 -60, 9 4 Z" fill="#000" opacity="0.25" transform="translate(10 8)" />
+              <path d="M-10 6 C -12 -60, -11 -200, -9 -300 C -6 -312, 6 -312, 9 -300 C 11 -200, 12 -60, 10 6 C 6 14, -6 14, -10 6 Z" fill="#9a6a3c" stroke="#3a2416" strokeWidth={4} />
+              <path d="M-3 -10 C -4 -90, -3 -200, -2 -290" fill="none" stroke="#c99560" strokeWidth={4} strokeLinecap="round" opacity="0.8" />
+              <path d="M-11 -210 L 11 -206 M -11 -196 L 11 -192 M -11 -182 L 11 -178" stroke="#e7d2a6" strokeWidth={4} />
+              <ellipse cx={0} cy={0} rx={18} ry={12} fill="#7a5230" stroke="#3a2416" strokeWidth={4} />
+            </g>
+          )}
+        </svg>
+
+        {/* 서랍 (재료 공급원). 이번 주문에 쓰는 재료만 놓인다 */}
+        {brewing &&
+          order.tasks.map((t, i) => {
+            const ing = getIngredient(t.ingredientId);
+            const d = WB.drawers[ing.drawer] ?? WB.drawers[0];
+            const done = t.status !== "pending";
+            const label = t.status === "done" ? "넣음" : t.status === "measured" ? "계량함" : i === active ? "항아리 위" : "서랍";
+            const isPicked = picked === i;
+            const dragging = drag?.active && drag.index === i;
+            return (
+              <button
+                key={t.problemId}
+                type="button"
+                className={`drawer-item ${isPicked ? "is-picked" : ""} ${done || i === active ? "is-used" : ""} ${bounce === i ? "is-bounce" : ""} ${dragging ? "is-dragging" : ""}`}
+                style={rect(d)}
+                aria-pressed={isPicked}
+                aria-label={`${ing.name} (${ing.unit}) ${label}${isPicked ? ", 집음" : ""}`}
+                disabled={done || i === active || !canPlace}
+                onPointerDown={(e: ReactPointerEvent<HTMLButtonElement>) => onJarPointerDown(e, i)}
+                onPointerMove={onJarPointerMove}
+                onPointerUp={onJarPointerUp}
+                onPointerCancel={onJarPointerCancel}
+                onLostPointerCapture={onJarPointerCancel}
+                onClick={() => onJarClick(i)}
+                data-testid={`jar-${t.ingredientId}`}
+                data-sfx="pick"
+              >
+                <DrawerArt ing={ing} width={d.width * L.s} height={d.height * L.s} picked={isPicked} />
+                <span className="drawer-tag">
+                  {t.status === "done" && <Icon name="check" size={13} />} {ing.name} · {ing.unit}
+                </span>
+              </button>
+            );
+          })}
+        {picked !== null && (
+          <button type="button" className="btn btn-quiet unpick-btn" style={{ left: L.left + WB.drawers[0].x * L.s, top: L.top + (WB.drawers[0].y + WB.drawers[0].height + 8) * L.s }} onClick={() => setPicked(null)} data-testid="unpick">
+            집기 취소
+          </button>
         )}
 
-        <section className="station" aria-label="제조대" style={{ backgroundImage: `url("${assetUrl(SHOP_ART.workbench)}")` }}>
-          <p className="station-hint" role="status" data-testid="instruction">
-            {step === "stir" && <Icon name="hand" size={20} />} {instruction[step]}
-          </p>
-          <div
-            ref={zoneRef}
-            className={`cauldron-zone ${picked !== null || drag?.active ? "is-target" : ""} ${stirMode ? "is-stirring" : ""} ${holding ? "is-holding" : ""}`}
-            onPointerDown={onZonePointerDown}
-            onPointerMove={onZonePointerMove}
-            onPointerUp={onZonePointerEnd}
-            onPointerCancel={onZonePointerEnd}
-            onLostPointerCapture={onZonePointerEnd}
-            onKeyDown={onZoneKeyDown}
-            tabIndex={stirMode ? 0 : -1}
-            role={stirMode ? "slider" : undefined}
-            aria-label={stirMode ? "젓는 막대 (좌우 화살표로도 저을 수 있어요)" : undefined}
-            aria-valuemin={stirMode ? 0 : undefined}
-            aria-valuemax={stirMode ? 100 : undefined}
-            aria-valuenow={stirMode ? order.stirProgress : undefined}
-            aria-valuetext={stirMode ? `젓기 ${order.stirProgress}%` : undefined}
-            data-testid="cauldron"
-          >
-            {picked !== null && canPlace ? (
-              <button type="button" className="cauldron-button" aria-label="솥에 넣기" onClick={() => place(picked)} data-testid="cauldron-drop" data-sfx="none">
-                <Cauldron doneColors={doneColors} stir={stir} finishColor={recipe.look.liquid} showStick={false} />
-              </button>
-            ) : (
-              <div className="cauldron-art">
-                <Cauldron
-                  doneColors={doneColors}
-                  stir={stir}
-                  finishColor={recipe.look.liquid}
-                  showStick={showStick}
-                  stickRef={stickRef}
-                  swirlRef={swirlRef}
-                  burst={burst}
-                />
-              </div>
-            )}
-            {stirMode && !holding && (
-              <span className="grab-hint" aria-hidden="true">
-                <Icon name="hand" size={30} />
+        {/* 항아리: 놓기·젓기 영역 (테두리 포함 원형) */}
+        <div
+          className={`pot-zone ${stirMode ? "is-stirring" : ""} ${holding ? "is-holding" : ""}`}
+          style={{ ...rect({ x: RIM.cx - RIM.rx, y: RIM.cy - RIM.ry, width: RIM.rx * 2, height: RIM.ry * 2 }) }}
+          onPointerDown={onZonePointerDown}
+          onPointerMove={onZonePointerMove}
+          onPointerUp={onZonePointerEnd}
+          onPointerCancel={onZonePointerEnd}
+          onLostPointerCapture={onZonePointerEnd}
+          onKeyDown={onZoneKeyDown}
+          tabIndex={stirMode ? 0 : -1}
+          role={stirMode ? "slider" : undefined}
+          aria-label={stirMode ? "젓는 막대 (좌우 화살표로도 저을 수 있어요)" : "항아리"}
+          aria-valuemin={stirMode ? 0 : undefined}
+          aria-valuemax={stirMode ? 100 : undefined}
+          aria-valuenow={stirMode ? order.stirProgress : undefined}
+          aria-valuetext={stirMode ? `젓기 ${order.stirProgress}%` : undefined}
+          data-testid="cauldron"
+        >
+          {picked !== null && canPlace && (
+            <button type="button" className="pot-drop" aria-label="항아리에 넣기" onClick={() => place(picked)} data-testid="cauldron-drop" data-sfx="none">
+              <span className="pot-drop-label">여기에 놓기</span>
+            </button>
+          )}
+          {stirMode && !holding && (
+            <span className="grab-hint" aria-hidden="true">
+              <Icon name="hand" size={30} />
+            </span>
+          )}
+        </div>
+
+        {/* 떨어지는 재료 연출 */}
+        {pourAnim && pourIng && (
+          <div className="pour-drop" key={pourAnim.seq} data-testid="pour-anim" aria-hidden="true"
+            style={rect({ x: LIQ.cx - 70, y: LIQ.cy - 150, width: 140, height: 150 })}>
+            <IngredientArt ingredient={pourIng} size={Math.max(36, 110 * L.s)} />
+            <span className="pour-label">
+              {pourIng.name} {pourAnim.amount.length > 8 ? pourAnim.amount.slice(0, 8) + "…" : pourAnim.amount}{pourAnim.unit}
+            </span>
+          </div>
+        )}
+
+        {/* 병 받침: 병에 담은 포션 */}
+        {!brewing && (
+          <div className={`rack-bottles ${bottling ? "is-filling" : ""}`} style={rect(WB.bottleRack)} data-testid="bottled">
+            {Array.from({ length: Math.min(order.bottles, 6) }, (_, i) => (
+              <span key={i} className="bottle-slot" style={{ animationDelay: `${i * 0.1}s` }}>
+                <PotionBottle look={recipe.look} size={Math.max(28, 92 * L.s)} quality={order.quality} label={`${recipe.name} ${i + 1}번째 병`} />
               </span>
-            )}
-            {pourAnim && pourIng && (
-              <div className={`pour-overlay pour-${pourIng.kind}`} data-testid="pour-anim" aria-hidden="true" key={pourAnim.seq}>
-                <div className="pour-vessel">
-                  <IngredientArt ingredient={pourIng} size={74} />
-                </div>
-                <div className="pour-stream" style={{ color: pourIng.color }}>
-                  {pourIng.kind === "powder" ? (
-                    <>
-                      <i /><i /><i /><i /><i /><i />
-                    </>
-                  ) : (
-                    <b />
-                  )}
-                </div>
-                <div className="pour-label">
-                  {pourIng.name} {pourAnim.amount.length > 8 ? pourAnim.amount.slice(0, 8) + "…" : pourAnim.amount}
-                  {pourAnim.unit}
-                </div>
-              </div>
-            )}
+            ))}
+            {order.bottles > 6 && <span className="rack-more">모두 {order.bottles}병</span>}
           </div>
+        )}
 
-          {brewing && allDone && !stirred && (
-            <div className="stir-status">
-              <div className="stir-meter" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={order.stirProgress} aria-label="젓기 진행" data-testid="stir-meter">
-                <span style={{ width: `${order.stirProgress}%` }} />
-              </div>
-              <span className="stir-pct">{order.stirProgress}%</span>
-            </div>
-          )}
+        {/* 레시피북·주문서 버튼 (PNG + 위쪽 HTML 글자) */}
+        <BookButton
+          refEl={bookBtn}
+          box={WB.book}
+          rect={rect}
+          img={WB.recipeBook}
+          label="레시피"
+          active={popup === "recipe"}
+          onClick={() => openPopup("recipe")}
+          testId="open-recipe"
+        />
+        <BookButton
+          refEl={clipBtn}
+          box={WB.clipboard}
+          rect={rect}
+          img={WB.clipboardImage}
+          label="주문서"
+          active={popup === "order"}
+          onClick={() => openPopup("order")}
+          testId="open-order"
+        />
 
-          <div className="table-top">
-            {brewing && (
-              <div className="shelf" role="group" aria-label="재료 선반">
-                {order.tasks.map((t, i) => {
-                  const ing = getIngredient(t.ingredientId);
-                  const label = t.status === "done" ? "넣음" : t.status === "measured" ? "계량함" : i === active ? "솥 위" : "선반";
-                  const isPicked = picked === i;
-                  const dragging = drag?.active && drag.index === i;
-                  return (
-                    <button
-                      key={t.problemId}
-                      type="button"
-                      className={`jar ${isPicked ? "is-picked" : ""} ${t.status !== "pending" || i === active ? "is-used" : ""} ${bounce === i ? "is-bounce" : ""} ${dragging ? "is-dragging" : ""}`}
-                      aria-pressed={isPicked}
-                      aria-label={`${ing.name} (${ing.unit}) ${label}${isPicked ? ", 집음" : ""}`}
-                      disabled={t.status !== "pending" || i === active || !canPlace}
-                      onPointerDown={(e: ReactPointerEvent<HTMLButtonElement>) => onJarPointerDown(e, i)}
-                      onPointerMove={onJarPointerMove}
-                      onPointerUp={onJarPointerUp}
-                      onPointerCancel={endDrag}
-                      onClick={() => onJarClick(i)}
-                      data-testid={`jar-${t.ingredientId}`}
-                      data-sfx="pick"
-                    >
-                      <IngredientArt ingredient={ing} size={64} />
-                      <span className="jar-name">{ing.name}</span>
-                      <span className="jar-unit">
-                        {t.status === "done" && <Icon name="check" size={14} />} {ing.unit} · {label}
-                      </span>
-                    </button>
-                  );
-                })}
-                {picked !== null && (
-                  <button type="button" className="btn btn-quiet" onClick={() => setPicked(null)} data-testid="unpick">
-                    집기 취소
-                  </button>
-                )}
+        {!L.stacked && (
+          <>
+            <div className="bench-meter" style={rect({ x: 470, y: 864, width: 360, height: 44 })}>{meter}</div>
+            <div className="bench-actions" style={rect(WB.slab)}>{actions}</div>
+          </>
+        )}
+
+        {(activeTask || L.stacked) && (
+          <section className={`side-panel bench-panel ${activeTask ? "is-open" : ""}`} style={panelStyle} aria-label="계량">
+            {L.stacked && (
+              <div className="dock-row">
+                {meter}
+                {actions}
               </div>
             )}
-
-            <div className="station-actions">
-              {brewing && stirred && (
-                <button
-                  type="button"
-                  className="btn btn-gold btn-big"
-                  onClick={() => {
-                    dispatch({ type: "COMPLETE_POTION", orderId: order.id });
-                    setBottling(true);
-                  }}
-                  disabled={busy}
-                  data-testid="complete"
-                  data-sfx="bottle"
-                >
-                  <Icon name="potion" /> 병에 담기
-                </button>
-              )}
-              {!brewing && (
-                <div className="bottled-area" data-testid="bottled">
-                  <div className={`bottle-row ${bottling ? "is-filling" : ""}`} style={{ backgroundImage: `url("${assetUrl(SHOP_ART.tray)}")` }}>
-                    {Array.from({ length: Math.min(order.bottles, 9) }, (_, i) => (
-                      <span key={i} className="bottle-slot" style={{ animationDelay: `${i * 0.1}s` }}>
-                        <PotionBottle look={recipe.look} size={40} quality={order.quality} label={`${recipe.name} ${i + 1}번째 병`} />
-                      </span>
-                    ))}
-                  </div>
-                  <button type="button" className="btn btn-primary btn-big" disabled={bottling} onClick={() => dispatch({ type: "GO_COUNTER" })} data-testid="to-counter">
-                    창구로 가져가기 <Icon name="arrow" />
-                  </button>
-                </div>
-              )}
-              {state.feedback && active === null && <p className="station-notice" role="status">{state.feedback.title}</p>}
-            </div>
-          </div>
-        </section>
-
-        <section className={`side-panel ${activeTask ? "is-open" : ""}`} aria-label="계량">
-          {activeTask && active !== null ? (
-            <MeasurePanel order={order} task={activeTask} index={active} draft={state.draftAnswer} feedback={state.feedback} dispatch={dispatch} locked={busy} />
-          ) : (
-            <StepGuide order={order} step={step} />
-          )}
-        </section>
+            {activeTask && active !== null ? (
+              <MeasurePanel order={order} task={activeTask} index={active} draft={state.draftAnswer} feedback={state.feedback} dispatch={dispatch} locked={busy || popupOpen} />
+            ) : (
+              L.stacked && <StepGuide order={order} step={step} />
+            )}
+          </section>
+        )}
       </div>
 
       {drag?.active && (
         <div className="drag-ghost" ref={ghostRef} aria-hidden="true">
           <span className="drag-ghost-inner">
-            <IngredientArt ingredient={getIngredient(order.tasks[drag.index].ingredientId)} size={70} />
+            <IngredientArt ingredient={getIngredient(order.tasks[drag.index].ingredientId)} size={84} />
           </span>
         </div>
       )}
+
+      {popup && <BookPopup kind={popup} state={state} order={order} onClose={closePopup} />}
     </div>
+  );
+}
+
+/** 0~1 반지름의 소용돌이 호 (장면 좌표) */
+function spiralArc(r: number, i: number): string {
+  const a0 = i * 1.4;
+  const pts: string[] = [];
+  for (let k = 0; k <= 12; k++) {
+    const a = a0 + (k / 12) * Math.PI * 1.2;
+    const rr = r * (1 - k * 0.012);
+    pts.push(`${(LIQ.cx + Math.cos(a) * LIQ.rx * rr).toFixed(1)} ${(LIQ.cy + Math.sin(a) * LIQ.ry * rr).toFixed(1)}`);
+  }
+  return "M" + pts.join(" L");
+}
+
+/** 두 색 섞기 (t: 0 → a, 1 → b) */
+function blend(a: string, b: string, t: number): string {
+  const p = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  const c = x.map((v, i) => Math.round(v + (y[i] - v) * Math.max(0, Math.min(1, t))));
+  return `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function DrawerArt({ ing, width, height, picked }: { ing: Ingredient; width: number; height: number; picked: boolean }) {
+  if (ing.kind === "herb") return <EnergyHerbPile width={width} height={height * 0.8} picked={picked} />;
+  // 이전 버전 재료(달빛 이슬·별가루)는 호환용 그림
+  return (
+    <span className="drawer-legacy">
+      <IngredientArt ingredient={ing} size={Math.min(width, height) * 0.62} />
+    </span>
+  );
+}
+
+function BookButton({
+  refEl, box, rect, img, label, active, onClick, testId,
+}: {
+  refEl: RefObject<HTMLButtonElement | null>;
+  box: Box;
+  rect: (b: Box) => CSSProperties;
+  img: string;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  testId: string;
+}) {
+  return (
+    <button
+      ref={refEl}
+      type="button"
+      className={`book-btn ${active ? "is-active" : ""}`}
+      style={rect(box)}
+      onClick={onClick}
+      aria-haspopup="dialog"
+      aria-expanded={active}
+      data-testid={testId}
+      data-sfx="page"
+    >
+      <span className="book-btn-label">{label}</span>
+      <img src={assetUrl(img)} alt="" draggable={false} />
+    </button>
   );
 }
 
@@ -604,9 +790,9 @@ function StepChip({ done, label }: { done: boolean; label: string }) {
 
 function StepGuide({ order, step }: { order: Order; step: string }) {
   const items = [
-    { key: "place", label: "재료를 집어 솥에 놓아요", detail: "누르고 솥 누르기, 또는 끌어다 놓기" },
-    { key: "measure", label: "몇 mL·g 넣을지 정해요", detail: "주문 메모와 레시피북을 보고 계산해요" },
-    { key: "stir", label: "막대로 솥을 저어요", detail: "막대를 잡고 휘휘 움직이기" },
+    { key: "place", label: "재료를 집어 항아리에 놓아요", detail: "서랍을 누르고 항아리 누르기, 또는 끌어다 놓기" },
+    { key: "measure", label: "몇 g 넣을지 정해요", detail: "레시피북과 주문서를 보고 계산해요" },
+    { key: "stir", label: "막대로 저어요", detail: "막대를 잡고 휘휘 움직이기" },
     { key: "bottle", label: "병에 담아 창구로", detail: "손님에게 전달해요" },
   ];
   const seq = ["place", "measure", "stir", "bottle", "bottled"];

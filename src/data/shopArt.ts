@@ -5,7 +5,7 @@
  *  counterRoom  (SVG) 지금은 타이틀 화면 배경에만 쓴다. 창구·마감 화면은 아래 COUNTER_SCENE(PNG)
  *  counterTop   (SVG) 예전 창구 카운터. PNG 창구로 바뀌어 지금은 쓰지 않는다(호환용으로 남김)
  *  tray         포션을 건네는 받침(240×60)
- *  workbench    제조대 뒤쪽 벽(800×600). 가운데는 솥이 놓이므로 비워 둔다
+ *  workbench    (이전 SVG 제조대 벽, 지금은 쓰지 않음. 제작대는 아래 WORKBENCH_SCENE PNG)
  *  shutterLeft / shutterRight  덧문 한 짝(배경 좌표 350×500). 비워 두면 코드로 그린 덧문
  *  closedSign   '영업 종료' 표지판. 비워 두면 코드로 그린 표지판
  */
@@ -44,4 +44,41 @@ export const COUNTER_SCENE = {
   tableTop: 655,
   /** 손님이 서는 가로 기준(캔버스 가운데에서 얼마나 왼쪽인지). 좁은 화면은 가운데 */
   standX: -150,
+} as const;
+
+/**
+ * 제작대(탑뷰) PNG 한 장(1672×941)과 그 위의 클릭·드롭 영역. 숫자는 모두 이 캔버스의 픽셀 좌표다.
+ * 그림은 늘리거나 자르지 않고 화면 안에 통째로 맞춘다(바깥은 단색 여백).
+ *
+ *  pot.inner   항아리 안쪽(액체가 보이는 둥근 영역, 금속 테두리 안). 액체·막대·소용돌이는 이 타원 안에만 그린다
+ *  pot.rim     드롭·젓기를 받는 범위(테두리 포함)
+ *  drawers     위쪽 서랍 칸(서랍 번호 = data/ingredients.ts drawer). 0이 맨 왼쪽 위
+ *  bottleRack  오른쪽 빈 병 받침, slab 그 아래 돌판(병에 담은 포션을 놓는 곳)
+ *  book / clipboard  왼쪽 아래 레시피북, 오른쪽 아래 주문서 버튼 자리(그림 바깥 여백까지 포함한 클릭 상자)
+ */
+export const WORKBENCH_SCENE = {
+  width: 1672,
+  height: 941,
+  table: "assets/shop/workbench/table.png",
+  recipeBook: "assets/shop/workbench/recipe-book.png",
+  clipboardImage: "assets/shop/workbench/order-clipboard.png",
+  bookPanel: "assets/shop/workbench/book-panel.png",
+  pot: {
+    inner: { cx: 650, cy: 594, rx: 200, ry: 176 },
+    rim: { cx: 650, cy: 594, rx: 266, ry: 250 },
+  },
+  drawers: [
+    { x: 70, y: 40, width: 192, height: 140 },
+    { x: 292, y: 40, width: 196, height: 140 },
+    { x: 516, y: 40, width: 204, height: 140 },
+    { x: 750, y: 40, width: 204, height: 140 },
+    { x: 982, y: 40, width: 200, height: 140 },
+    { x: 1204, y: 40, width: 196, height: 140 },
+  ],
+  bottleRack: { x: 1092, y: 420, width: 336, height: 222 },
+  slab: { x: 1056, y: 686, width: 392, height: 158 },
+  /** 레시피북 PNG(1378×1141) 표시 상자: 왼쪽 아래 빈 나무판·바닥, 항아리 받침 천과 겹치지 않게 */
+  book: { x: 18, y: 640, width: 290, height: 240 },
+  /** 주문서 PNG(1097×1434) 표시 상자: 오른쪽 아래 빈 바닥, 돌판·병 받침과 겹치지 않게 */
+  clipboard: { x: 1488, y: 630, width: 168, height: 220 },
 } as const;

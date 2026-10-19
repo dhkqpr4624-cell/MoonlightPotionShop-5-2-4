@@ -13,21 +13,23 @@
 import { pickAppearance } from "../data/appearances.ts";
 import { CUSTOMER_IDS, fillLine, getCustomer } from "../data/customers.ts";
 import {
+  AMOUNT_BASE_EASY, AMOUNT_BASE_ORIGINAL, AMOUNT_PER_EASY, AMOUNT_PER_ORIGINAL,
   CUSTOM_EASY, CUSTOM_LESS_NOTE, CUSTOM_MORE_NOTE, CUSTOM_ORIGINAL_LESS, CUSTOM_ORIGINAL_MORE,
   LIFE_EACH_EASY, LIFE_EACH_ORIGINAL, LIFE_RATIO_EASY, LIFE_RATIO_ORIGINAL, LIFE_RULE_NOTE,
-  MULTI_EASY, MULTI_ORIGINAL, SHIFT_EASY, SHIFT_ORIGINAL,
+  MULTI_EASY, MULTI_ORIGINAL, OTHER_INGREDIENT_NOTE, SHIFT_EASY, SHIFT_ORIGINAL,
 } from "../data/dialogues.ts";
 import { getIngredient } from "../data/ingredients.ts";
 import {
   classifyProduct, inRange, INTRO_STAGES, introducedTypes, type LearningTypeId,
 } from "../data/learningTypes.ts";
 import { getLifeItem, LIFE_ITEMS } from "../data/lifeItems.ts";
-import { additiveAmount, getRecipe, RECIPES, SPECIAL_ORDER_PRICE, type Recipe } from "../data/recipes.ts";
+import { getRecipe, SPECIAL_ORDER_PRICE, type Recipe } from "../data/recipes.ts";
+import { availableRecipes, freeIngredients } from "./unlocks.ts";
 import {
   compare, isNaturalNumber, multiplyStrings, parseDecimal, shiftPoint, toDecimalString,
 } from "../lib/decimal.ts";
 import { drawFromDeck, EMPTY_DECK, type DeckState } from "../lib/deck.ts";
-import { copula } from "../lib/josa.ts";
+import { copula, josa } from "../lib/josa.ts";
 import { randomInt, shuffle, type Rng } from "../lib/rng.ts";
 import {
   CUSTOMERS_PER_DAY,
@@ -50,6 +52,10 @@ export const BOTTLE_COUNTS = ["2", "3", "4", "5", "6", "7", "8", "9"];
 export const MULTIPLIERS_D1 = ["0.2", "0.3", "0.4", "0.5", "0.6", "0.8", "1.2", "1.5"];
 /** 소수 두 자리 배수 (0.12~1.25) — 자연수 기본량(④)에만 */
 export const MULTIPLIERS_D2 = ["0.15", "0.25", "0.35", "0.45", "0.75", "1.25"];
+/** 손님 지정량 주문: 1병당 양(소수 두 자리) — ② */
+export const GIVEN_D2 = ["0.15", "0.25", "0.35", "0.45", "0.75", "1.25"];
+/** 손님 지정량 주문: 기준 양(자연수) — ③④ */
+export const GIVEN_NATURAL = ["2", "3", "4", "5", "6", "7", "8", "9"];
 /** ⑦ 기준 식 a × b */
 export const SHIFT_BASE_A = ["0.6", "0.8", "1.2", "1.5", "2.4"];
 export const SHIFT_BASE_B = ["3", "4", "6"];
@@ -59,6 +65,11 @@ export const SHIFT_VARIANTS: ShiftVariant[] = ["aX10", "aD10", "bX10", "bD10", "
 const norm = (s: string) => toDecimalString(parseDecimal(s));
 
 /** 주문 키 하나가 담는 계산 문제들의 유형 */
+/** 처음 해금 상태(무료 재료)로 쓸 수 있는 레시피 — 인자를 주지 않았을 때의 기본값 */
+export function defaultRecipes(): Recipe[] {
+  return availableRecipes(freeIngredients());
+}
+
 export interface Candidate {
   key: string;
   kind: OrderKind;
@@ -72,9 +83,9 @@ function recipeTypes(recipe: Recipe, b: string) {
   return recipe.additives.map((ad) => ({ type: classifyProduct(ad.amount, b), a: norm(ad.amount), b: norm(b) }));
 }
 
-export function multiBottleCandidates(intro: LearningTypeId[]): Candidate[] {
+export function multiBottleCandidates(intro: LearningTypeId[], recipes: Recipe[] = defaultRecipes()): Candidate[] {
   const out: Candidate[] = [];
-  for (const recipe of Object.values(RECIPES)) {
+  for (const recipe of recipes) {
     for (const n of BOTTLE_COUNTS) {
       const f = recipeTypes(recipe, n);
       if (f.some((x) => !x.type || !intro.includes(x.type) || !recipe.supports.multiBottle.includes(x.type))) continue;
@@ -84,9 +95,9 @@ export function multiBottleCandidates(intro: LearningTypeId[]): Candidate[] {
   return out;
 }
 
-export function customCandidates(intro: LearningTypeId[]): Candidate[] {
+export function customCandidates(intro: LearningTypeId[], recipes: Recipe[] = defaultRecipes()): Candidate[] {
   const out: Candidate[] = [];
-  for (const recipe of Object.values(RECIPES)) {
+  for (const recipe of recipes) {
     for (const m of [...MULTIPLIERS_D1, ...MULTIPLIERS_D2]) {
       const f = recipeTypes(recipe, m);
       if (f.some((x) => !x.type || !intro.includes(x.type) || !recipe.supports.customMultiplier.includes(x.type))) continue;
@@ -96,8 +107,30 @@ export function customCandidates(intro: LearningTypeId[]): Candidate[] {
   return out;
 }
 
-export function lifeCandidates(intro: LearningTypeId[]): Candidate[] {
+/**
+ * 손님 지정량 주문 (재료 1종 레시피만). 레시피 기본량을 바꾸지 않고, 손님이 정한 양으로 다른 인수 구조를 낸다.
+ *  perBottle: 1병당 소수 두 자리 × 병 수 → ②
+ *  base:      자연수 기준 양 × 소수 한·두 자리 배수 → ③④,  소수 두 자리 기준 양 × 소수 한 자리 배수 → ⑥
+ */
+export function amountCandidates(intro: LearningTypeId[], recipes: Recipe[] = defaultRecipes()): Candidate[] {
   const out: Candidate[] = [];
+  const add = (recipe: Recipe, form: "perBottle" | "base", a: string, b: string) => {
+    const t = classifyProduct(a, b);
+    if (!t || !intro.includes(t) || !inRange(a) || !inRange(b)) return;
+    out.push({ key: `amount:${recipe.id}:${form}:${a}:${b}`, kind: "customAmount", types: [t], factors: [{ type: t, a: norm(a), b: norm(b) }] });
+  };
+  for (const recipe of recipes) {
+    if (recipe.additives.length !== 1) continue;
+    for (const a of GIVEN_D2) for (const n of BOTTLE_COUNTS) add(recipe, "perBottle", a, n);
+    for (const a of GIVEN_NATURAL) for (const m of [...MULTIPLIERS_D1, ...MULTIPLIERS_D2]) add(recipe, "base", a, m);
+    for (const a of GIVEN_D2) for (const m of MULTIPLIERS_D1) add(recipe, "base", a, m);
+  }
+  return out;
+}
+
+export function lifeCandidates(intro: LearningTypeId[], recipes: Recipe[] = defaultRecipes()): Candidate[] {
+  const out: Candidate[] = [];
+  if (!recipes.length) return out;
   for (const item of Object.values(LIFE_ITEMS)) {
     for (const [a, b] of item.pairs) {
       const t = classifyProduct(a, b);
@@ -108,8 +141,8 @@ export function lifeCandidates(intro: LearningTypeId[]): Candidate[] {
   return out;
 }
 
-export function shiftCandidates(intro: LearningTypeId[]): Candidate[] {
-  if (!intro.includes("shift")) return [];
+export function shiftCandidates(intro: LearningTypeId[], recipes: Recipe[] = defaultRecipes()): Candidate[] {
+  if (!intro.includes("shift") || !recipes.length) return [];
   const out: Candidate[] = [];
   for (const a of SHIFT_BASE_A) for (const b of SHIFT_BASE_B) for (const v of SHIFT_VARIANTS) {
     const c = shiftConcept(a, b, v);
@@ -131,20 +164,23 @@ export function shiftConcept(refA: string, refB: string, v: ShiftVariant): Conce
   return { refA, refB, refProduct: multiplyStrings(refA, refB), newA, newB, correct };
 }
 
-export function candidatesFor(kind: OrderKind, intro: LearningTypeId[]): Candidate[] {
+export function candidatesFor(kind: OrderKind, intro: LearningTypeId[], recipes: Recipe[] = defaultRecipes()): Candidate[] {
   switch (kind) {
-    case "multiBottle": return multiBottleCandidates(intro);
-    case "customMultiplier": return customCandidates(intro);
-    case "lifeItem": return lifeCandidates(intro);
-    case "pointShift": return shiftCandidates(intro);
+    case "multiBottle": return multiBottleCandidates(intro, recipes);
+    case "customMultiplier": return customCandidates(intro, recipes);
+    case "customAmount": return amountCandidates(intro, recipes);
+    case "lifeItem": return lifeCandidates(intro, recipes);
+    case "pointShift": return shiftCandidates(intro, recipes);
   }
 }
 
+export const ORDER_KINDS: OrderKind[] = ["multiBottle", "customMultiplier", "customAmount", "lifeItem", "pointShift"];
+
 /** 데이터 검증: 소개된 유형마다 낼 수 있는 주문 후보가 있는지 (없는 유형 목록) */
-export function uncoveredTypes(intro: LearningTypeId[]): LearningTypeId[] {
+export function uncoveredTypes(intro: LearningTypeId[], recipes: Recipe[] = defaultRecipes()): LearningTypeId[] {
   const covered = new Set<LearningTypeId>();
-  for (const k of ["multiBottle", "customMultiplier", "lifeItem", "pointShift"] as OrderKind[]) {
-    for (const c of candidatesFor(k, intro)) c.types.forEach((t) => covered.add(t));
+  for (const k of ORDER_KINDS) {
+    for (const c of candidatesFor(k, intro, recipes)) c.types.forEach((t) => covered.add(t));
   }
   return intro.filter((t) => !covered.has(t));
 }
@@ -194,6 +230,11 @@ function specifiedTask(orderId: string, ingredientId: string, amount: string): I
   });
 }
 
+/** 계량 단위 안내 (예: "기력초는 g으로 계량", 이전 레시피는 "달빛 이슬은 mL, 별가루는 g으로 계량") */
+export function unitMemo(recipe: Recipe): string {
+  return recipe.additives.map((ad) => { const i = getIngredient(ad.ingredientId); return `${josa(i.name, "은/는")} ${i.unit}`; }).join(", ") + "으로 계량";
+}
+
 function baseSolution(recipe: Recipe, times: string, note: string) {
   return [{ name: recipe.baseSolution.name, amount: multiplyStrings(recipe.baseSolution.amountMl, times), unit: "mL" as const, note }];
 }
@@ -202,6 +243,8 @@ export interface BuildContext {
   orderNumber: number;
   customerId: string;
   rng: Rng;
+  /** 생활 소재·비교 주문에 쓸 레시피 후보 (주지 않으면 처음 해금 상태의 레시피) */
+  recipes?: Recipe[];
 }
 
 /** 키에서 주문을 만든다. 같은 키 + 같은 난수면 같은 주문 */
@@ -223,7 +266,7 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
       greet, waiting, reaction: null,
       original: fillLine(pick(MULTI_ORIGINAL, ctx.rng), v),
       easy: fillLine(MULTI_EASY, v),
-      memo: [`포션: ${recipe.name} ${n}병`, "재료: 레시피북의 1병당 양으로 " + n + "병만큼", "달빛 이슬은 mL, 별가루는 g으로 계량"],
+      memo: [`포션: ${recipe.name} ${n}병`, "재료: 레시피북의 1병당 양으로 " + n + "병만큼", unitMemo(recipe)],
     };
     return {
       ...base, kind: "multiBottle", recipeId: recipe.id, bottles: Number(n), multiplier: null, life: null,
@@ -254,34 +297,89 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
     };
   }
 
+  if (parts[0] === "amount") {
+    const recipe = getRecipe(parts[1]);
+    const form = parts[2] as "perBottle" | "base";
+    const [a, b] = [parts[3], parts[4]];
+    if (recipe.additives.length !== 1 || (form !== "perBottle" && form !== "base")) throw new Error(`잘못된 손님 지정량 주문: ${key}`);
+    const ing = getIngredient(recipe.additives[0].ingredientId);
+    const amt = `${a}${ing.unit}`;
+    if (form === "perBottle") {
+      if (!isNaturalNumber(b)) throw new Error(`잘못된 병 수: ${b}`);
+      const v = { potion: recipe.name, n: b, ing: ing.name, amt };
+      const script: OrderScript = {
+        greet, waiting, reaction: null,
+        original: fillLine(pick(AMOUNT_PER_ORIGINAL, ctx.rng), v),
+        easy: fillLine(AMOUNT_PER_EASY, v),
+        memo: [
+          `포션: ${recipe.name} ${b}병 (손님 지정량 주문)`,
+          `${ing.name}(${ing.unit}): 손님이 정한 1병당 ${amt}씩 ${b}병만큼 — 손님 지정이 레시피보다 우선`,
+          `기본 용액은 1병에 ${recipe.baseSolution.amountMl}mL씩 자동`,
+        ],
+      };
+      return {
+        ...base, kind: "customAmount", recipeId: recipe.id, bottles: Number(b), multiplier: null, life: null,
+        given: { form, amount: a, times: b },
+        tasks: [calcTask(id, ing.id, a, b, "bottles")],
+        autoAdditions: baseSolution(recipe, b, `1병에 ${recipe.baseSolution.amountMl}mL씩 자동으로 담아요`),
+        price: recipe.pricePerBottle * Number(b),
+        script,
+      };
+    }
+    const less = compare(parseDecimal(b), parseDecimal("1")) < 0;
+    const v = { potion: recipe.name, m: b, ing: ing.name, amt, amtIs: copula(amt) + "." };
+    const script: OrderScript = {
+      greet, waiting, reaction: null,
+      original: fillLine(pick(AMOUNT_BASE_ORIGINAL, ctx.rng), v),
+      easy: fillLine(AMOUNT_BASE_EASY, { ...v, compare: fillLine(less ? CUSTOM_LESS_NOTE : CUSTOM_MORE_NOTE, v) }),
+      memo: [
+        `포션: ${recipe.name} 1병 (손님 지정량 주문)`,
+        `${ing.name}(${ing.unit}): 손님이 알려 준 기준 ${amt}의 ${b}배 — 손님 지정이 레시피보다 우선`,
+        `기본 용액은 1병 ${recipe.baseSolution.amountMl}mL 자동`,
+      ],
+    };
+    return {
+      ...base, kind: "customAmount", recipeId: recipe.id, bottles: 1, multiplier: null, life: null,
+      given: { form, amount: a, times: b },
+      tasks: [calcTask(id, ing.id, a, b, "multiplier")],
+      autoAdditions: baseSolution(recipe, "1", `1병 기본 용액 ${recipe.baseSolution.amountMl}mL를 자동으로 담아요`),
+      price: SPECIAL_ORDER_PRICE,
+      script,
+    };
+  }
+
   if (parts[0] === "life") {
     const item = getLifeItem(parts[1]);
     const [a, b] = [parts[2], parts[3]];
-    const recipe = getRecipe(pick(["starlight", "sprout", "mist"], ctx.rng));
-    const target = getIngredient(item.targetIngredientId);
-    const other = recipe.additives.find((ad) => ad.ingredientId !== item.targetIngredientId)!;
-    const otherIng = getIngredient(other.ingredientId);
+    const recipe = pick(ctx.recipes ?? defaultRecipes(), ctx.rng);
+    // 계산한 숫자를 넣을 재료: 레시피에 생활 소재가 정한 재료가 있으면 그것, 없으면 레시피의 첫 재료
+    const targetId = recipe.additives.some((ad) => ad.ingredientId === item.targetIngredientId)
+      ? item.targetIngredientId
+      : recipe.additives[0].ingredientId;
+    const target = getIngredient(targetId);
+    const others = recipe.additives.filter((ad) => ad.ingredientId !== targetId).map((ad) => getIngredient(ad.ingredientId));
+    const otherNote = others.length ? fillLine(OTHER_INGREDIENT_NOTE, { other: others.map((x) => x.name).join(", ") }) : "";
     const v = {
       quirk: item.quirk, item: item.name, counter: item.counter, amount: copula(`${a}${item.unit}`), a, b, lu: item.unit,
-      measureWord: item.measureWord, ing: target.name, u: target.unit, potion: recipe.name, other: otherIng.name,
+      measureWord: item.measureWord, ing: target.name, u: target.unit, potion: recipe.name,
     };
     const each = item.form === "each";
     const condition = each
       ? `${item.name} 1${item.counter} ${a}${item.unit}, ${b}${item.counter}의 ${item.measureWord}와 같은 숫자만큼`
       : `${item.name} ${a}${item.unit}의 ${b}배와 같은 숫자만큼`;
     const tasks = recipe.additives.map((ad) =>
-      ad.ingredientId === item.targetIngredientId
+      ad.ingredientId === targetId
         ? calcTask(id, ad.ingredientId, a, b, each ? "itemCount" : "itemRatio")
         : specifiedTask(id, ad.ingredientId, ad.amount),
     );
     const script: OrderScript = {
       greet, waiting, reaction: null,
       original: fillLine(each ? LIFE_EACH_ORIGINAL : LIFE_RATIO_ORIGINAL, v),
-      easy: fillLine(each ? LIFE_EACH_EASY : LIFE_RATIO_EASY, v),
+      easy: fillLine(each ? LIFE_EACH_EASY : LIFE_RATIO_EASY, v) + otherNote,
       memo: [
         `포션: ${recipe.name} 1병 (손님 지정 특별 주문)`,
         `${target.name}(${target.unit}): ${condition} — 손님 지정이 레시피보다 우선`,
-        `${otherIng.name}(${otherIng.unit}): 레시피북의 1병 기본량 그대로`,
+        ...others.map((x) => `${x.name}(${x.unit}): 레시피북의 1병 기본량 그대로`),
         LIFE_RULE_NOTE,
       ],
     };
@@ -294,30 +392,33 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
 
   if (parts[0] === "shift") {
     const concept = shiftConcept(parts[1], parts[2], parts[3] as ShiftVariant);
-    const recipe = getRecipe("starlight");
-    const dew = getIngredient("moonDew");
+    const recipe = pick(ctx.recipes ?? defaultRecipes(), ctx.rng);
+    // 비교하는 재료는 레시피의 첫 재료, 나머지 재료(있으면)는 1병 기본량 그대로
+    const main = getIngredient(recipe.additives[0].ingredientId);
+    const rest = recipe.additives.slice(1);
     const task: IngredientTask = {
-      ...blankTask(id, "moonDew", "concept", {
+      ...blankTask(id, main.id, "concept", {
         a: concept.newA, b: concept.newB, answer: multiplyStrings(concept.newA, concept.newB), learningType: "shift",
-        unit: dew.unit, bMeaning: "shift",
+        unit: main.unit, bMeaning: "shift",
       }),
       concept,
     };
-    const v = { refA: concept.refA, refB: concept.refB, p: concept.refProduct, newA: concept.newA, newB: concept.newB };
+    const v = { refA: concept.refA, refB: concept.refB, p: concept.refProduct, newA: concept.newA, newB: concept.newB, ing: main.name, u: main.unit };
+    const otherNote = rest.length ? fillLine(OTHER_INGREDIENT_NOTE, { other: rest.map((ad) => getIngredient(ad.ingredientId).name).join(", ") }) : "";
     const script: OrderScript = {
       greet, waiting, reaction: null,
       original: fillLine(SHIFT_ORIGINAL, v),
-      easy: fillLine(SHIFT_EASY, v),
+      easy: fillLine(SHIFT_EASY, v) + otherNote,
       memo: [
         `포션: ${recipe.name} 1병 (손님 지정 특별 주문)`,
-        `지난번 달빛 이슬: ${concept.refA} × ${concept.refB} = ${concept.refProduct}mL`,
-        `이번 달빛 이슬: ${concept.newA} × ${concept.newB}mL — 지난번의 몇 배인지 골라요 (양은 자동 계량)`,
-        "별가루(g): 레시피북의 1병 기본량 그대로",
+        `지난번 ${main.name}: ${concept.refA} × ${concept.refB} = ${concept.refProduct}${main.unit}`,
+        `이번 ${main.name}: ${concept.newA} × ${concept.newB}${main.unit} — 지난번의 몇 배인지 골라요 (양은 자동 계량)`,
+        ...rest.map((ad) => { const x = getIngredient(ad.ingredientId); return `${x.name}(${x.unit}): 레시피북의 1병 기본량 그대로`; }),
       ],
     };
     return {
       ...base, kind: "pointShift", recipeId: recipe.id, bottles: 1, multiplier: null, life: null,
-      tasks: [task, specifiedTask(id, "starDust", additiveAmount(recipe, "starDust"))],
+      tasks: [task, ...rest.map((ad) => specifiedTask(id, ad.ingredientId, ad.amount))],
       autoAdditions: baseSolution(recipe, "1", `1병 기본 용액 ${recipe.baseSolution.amountMl}mL를 자동으로 담아요`),
       price: SPECIAL_ORDER_PRICE, script,
     };
@@ -332,6 +433,8 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
 
 export interface DayPlanInput {
   dayNumber: number;
+  /** 해금한 재료 (새 주문에는 필요한 재료를 모두 해금한 레시피만 나온다). 주지 않으면 처음 해금 상태 */
+  unlocked?: string[];
   introStage: number;
   /** 이 날 처음 소개하는 유형 */
   newTypes: LearningTypeId[];
@@ -360,10 +463,10 @@ export function eligibleReview(review: ReviewCandidate[], intro: LearningTypeId[
 }
 
 /** 복습 후보와 같은 유형이면서 원래와 다른 인수를 쓰는 주문 후보 */
-export function reviewCandidatesFor(c: ReviewCandidate, intro: LearningTypeId[]): Candidate[] {
-  const kinds: OrderKind[] = c.learningType === "shift" ? ["pointShift"] : ["multiBottle", "customMultiplier", "lifeItem"];
+export function reviewCandidatesFor(c: ReviewCandidate, intro: LearningTypeId[], recipes: Recipe[] = defaultRecipes()): Candidate[] {
+  const kinds: OrderKind[] = c.learningType === "shift" ? ["pointShift"] : ["multiBottle", "customMultiplier", "customAmount", "lifeItem"];
   return kinds
-    .flatMap((k) => candidatesFor(k, intro))
+    .flatMap((k) => candidatesFor(k, intro, recipes))
     .filter((cand) => cand.factors.some((f) => f.type === c.learningType && !(f.a === norm(c.a) && f.b === norm(c.b))));
 }
 
@@ -395,8 +498,11 @@ function drawAvoiding(deck: DeckState, keys: string[], rng: Rng, avoid: (k: stri
 export function planDay(input: DayPlanInput): DayPlanResult {
   const { rng } = input;
   const intro = introducedTypes(input.introStage);
+  const recipes = availableRecipes(input.unlocked ?? freeIngredients());
+  if (!recipes.length) throw new Error("해금된 레시피가 없습니다.");
   const decks = { ...input.decks };
-  const keysOf = (kind: OrderKind) => candidatesFor(kind, intro).map((c) => c.key);
+  const keysOf = (kind: OrderKind) => candidatesFor(kind, intro, recipes).map((c) => c.key);
+  const isNormal = (k: string) => { const kk = keyKind(k); return kk === "multiBottle" || kk === "customMultiplier" || kk === "customAmount"; };
 
   /** kind만 있으면 그 유형 덱에서, keys가 있으면 그 후보 중에서 뽑는다 */
   type Slot = { kind: OrderKind | null; keys?: string[]; reviewOf?: ReviewCandidate; special: boolean };
@@ -406,8 +512,11 @@ export function planDay(input: DayPlanInput): DayPlanResult {
   const newT = input.newTypes;
   if (newT.includes("shift")) slots.push({ kind: "pointShift", special: true });
   for (const t of newT.filter((x) => x !== "shift")) {
-    const keys = [...candidatesFor("multiBottle", intro), ...candidatesFor("customMultiplier", intro)]
+    // 레시피 주문으로 낼 수 있으면 그것, 없으면 손님 지정량 주문으로 (한 재료 레시피는 ②③④⑥을 지정량 주문으로 낸다)
+    const recipeKeys = [...candidatesFor("multiBottle", intro, recipes), ...candidatesFor("customMultiplier", intro, recipes)]
       .filter((c) => c.types.includes(t)).map((c) => c.key);
+    const keys = recipeKeys.length ? recipeKeys
+      : candidatesFor("customAmount", intro, recipes).filter((c) => c.types.includes(t)).map((c) => c.key);
     if (keys.length) slots.push({ kind: null, keys, special: false });
   }
 
@@ -417,8 +526,8 @@ export function planDay(input: DayPlanInput): DayPlanResult {
   if (reviewPool.length) {
     const target = reviewPool.sort((a, b) => a.createdDay - b.createdDay)[0];
     // 복습은 가능하면 일반 주문(여러 병·맞춤)으로, 안 되면 생활 소재·비교 주문으로
-    const all = reviewCandidatesFor(target, intro).map((c) => c.key);
-    const normal = all.filter((k) => keyKind(k) === "multiBottle" || keyKind(k) === "customMultiplier");
+    const all = reviewCandidatesFor(target, intro, recipes).map((c) => c.key);
+    const normal = all.filter(isNormal);
     const pool = normal.length ? normal : all;
     if (pool.length) {
       const recent = new Set(Object.values(decks).map((d) => d.lastDrawn));
@@ -438,10 +547,10 @@ export function planDay(input: DayPlanInput): DayPlanResult {
     slots.push({ kind: "lifeItem", special: true });
   }
 
-  // 나머지: 일반 주문 (여러 병 / 맞춤 배수 섞기)
-  const customAvailable = keysOf("customMultiplier").length > 0;
+  // 나머지: 일반 주문 (여러 병을 중심으로, 맞춤 배수·손님 지정량 주문을 섞는다)
+  const extraKinds = (["customMultiplier", "customAmount"] as OrderKind[]).filter((k) => keysOf(k).length > 0);
   while (slots.length < CUSTOMERS_PER_DAY) {
-    const kind: OrderKind = customAvailable && rng() < 0.45 ? "customMultiplier" : "multiBottle";
+    const kind: OrderKind = extraKinds.length && rng() < 0.45 ? extraKinds[randomInt(rng, extraKinds.length)] : "multiBottle";
     slots.push({ kind, special: false });
   }
   const trimmed = slots.slice(0, CUSTOMERS_PER_DAY);
@@ -481,7 +590,7 @@ export function planDay(input: DayPlanInput): DayPlanResult {
     else lastBottles = null;
 
     const customerId = CUSTOMER_IDS[randomInt(rng, CUSTOMER_IDS.length)];
-    let order = createOrderFromKey(key, { orderNumber: n, customerId, rng });
+    let order = createOrderFromKey(key, { orderNumber: n, customerId, rng, recipes });
     // 외형은 문제 난수와 따로, 주문 번호로 정한다. 바로 앞 손님과 같은 외형은 피한다
     const appearanceId = pickAppearance(customerId, n, lastAppearance);
     if (appearanceId) order = { ...order, appearanceId };
@@ -505,7 +614,7 @@ export function planDay(input: DayPlanInput): DayPlanResult {
 
 export function keyKind(key: string): OrderKind {
   const p = key.split(":")[0];
-  return p === "multiBottle" ? "multiBottle" : p === "custom" ? "customMultiplier" : p === "life" ? "lifeItem" : "pointShift";
+  return p === "multiBottle" ? "multiBottle" : p === "custom" ? "customMultiplier" : p === "amount" ? "customAmount" : p === "life" ? "lifeItem" : "pointShift";
 }
 
 /** 이 날 처음 소개되는 유형 */

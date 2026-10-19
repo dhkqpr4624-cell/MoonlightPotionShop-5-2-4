@@ -44,11 +44,16 @@ export const CHOICE_LABEL: Record<ShiftChoice, string> = { x10: "10배", same: "
 function conditionLine(order: Order, task: IngredientTask): string {
   const ing = getIngredient(task.ingredientId);
   const p = task.problem;
+  const given = order.kind === "customAmount";
   switch (p.bMeaning) {
     case "bottles":
-      return `1병에는 ${ing.name} ${josa(`${p.a}${p.unit}`, "이/가")} 필요하고, 주문은 ${p.b}병이에요.`;
+      return given
+        ? `손님이 정한 1병당 ${ing.name} 양은 ${p.a}${p.unit}, 주문은 ${p.b}병이에요.`
+        : `1병에는 ${ing.name} ${josa(`${p.a}${p.unit}`, "이/가")} 필요하고, 주문은 ${p.b}병이에요.`;
     case "multiplier":
-      return `레시피북의 ${ing.name} 기본량은 ${p.a}${p.unit}, 주문은 기본 레시피의 ${p.b}배예요.`;
+      return given
+        ? `손님이 알려 준 ${ing.name} 기준 양은 ${p.a}${p.unit}, 주문은 그 ${p.b}배예요.`
+        : `레시피북의 ${ing.name} 기본량은 ${p.a}${p.unit}, 주문은 기본 레시피의 ${p.b}배예요.`;
     case "itemCount":
     case "itemRatio": {
       const item = getLifeItem(order.life!.itemId);
@@ -111,7 +116,7 @@ export function solutionSteps(order: Order, task: IngredientTask): string[] {
     ];
     if (c.correct === "same") lines.push("하나는 10배, 다른 하나는 1/10배가 되었으니 곱은 지난번과 같아요.");
     else lines.push(`곱하는 수 하나가 ${CHOICE_LABEL[c.correct]}가 되면 곱도 ${CHOICE_LABEL[c.correct]}가 돼요.`);
-    lines.push(`그래서 이번 곱은 지난번의 '${CHOICE_LABEL[c.correct]}'이고, ${c.refProduct}의 ${CHOICE_LABEL[c.correct]}인 ${copula(`${p.answer}mL`)}.`);
+    lines.push(`그래서 이번 곱은 지난번의 '${CHOICE_LABEL[c.correct]}'이고, ${c.refProduct}의 ${CHOICE_LABEL[c.correct]}인 ${copula(`${p.answer}${p.unit}`)}.`);
     return lines;
   }
 

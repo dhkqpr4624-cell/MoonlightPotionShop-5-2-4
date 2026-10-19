@@ -30,14 +30,30 @@ export const LIFE_EACH_ORIGINAL =
 export const LIFE_RATIO_ORIGINAL =
   "{quirk} {item}이 {amount}. 그 {b}배와 같은 숫자만큼 {ing}을 넣어 주세요. 포션은 {potion} 한 병이면 돼요.";
 export const LIFE_EACH_EASY =
-  "{item} {b}{counter}의 {measureWord}를 계산해 주세요. 그 결과의 숫자를 {ing}의 {u} 값으로 쓰면 돼요. 단위를 바꾸는 계산이 아니라, 계산한 숫자를 그대로 마법 재료량으로 쓰는 특별 주문이에요. {other}는 레시피북의 1병 기본량으로 넣어 주세요.";
+  "{item} {b}{counter}의 {measureWord}를 계산해 주세요. 그 결과의 숫자를 {ing}의 {u} 값으로 쓰면 돼요. 단위를 바꾸는 계산이 아니라, 계산한 숫자를 그대로 마법 재료량으로 쓰는 특별 주문이에요.";
 export const LIFE_RATIO_EASY =
-  "{item} {a}{lu}의 {b}배를 계산해 주세요. 그 결과의 숫자를 {ing}의 {u} 값으로 쓰면 돼요. 단위를 바꾸는 계산이 아니라, 계산한 숫자를 그대로 마법 재료량으로 쓰는 특별 주문이에요. {other}는 레시피북의 1병 기본량으로 넣어 주세요.";
+  "{item} {a}{lu}의 {b}배를 계산해 주세요. 그 결과의 숫자를 {ing}의 {u} 값으로 쓰면 돼요. 단위를 바꾸는 계산이 아니라, 계산한 숫자를 그대로 마법 재료량으로 쓰는 특별 주문이에요.";
+/** 레시피에 계산하지 않는 다른 재료가 있을 때만 붙는 문장 */
+export const OTHER_INGREDIENT_NOTE = " {other}는 레시피북의 1병 기본량으로 넣어 주세요.";
 
 export const SHIFT_ORIGINAL =
-  "지난번 특별 포션에는 달빛 이슬을 {refA} × {refB} = {p}mL 넣었대요. 이번에는 {newA} × {newB}mL로 해 주세요! 그런데 이번 양은 지난번의 몇 배예요?";
+  "지난번 특별 포션에는 {ing}을 {refA} × {refB} = {p}{u} 넣었대요. 이번에는 {newA} × {newB}{u}로 해 주세요! 그런데 이번 양은 지난번의 몇 배예요?";
 export const SHIFT_EASY =
-  "두 곱셈식을 비교해 볼까요? 지난번은 {refA} × {refB}, 이번은 {newA} × {newB}예요. 어떤 수가 몇 배로 바뀌었는지 보고, 이번 곱이 지난번의 10배인지, 같은지, 1/10배인지 골라 주세요. 고르고 나면 달빛 이슬은 자동으로 계량돼요. 별가루는 레시피북의 1병 기본량으로 넣어 주세요.";
+  "두 곱셈식을 비교해 볼까요? 지난번은 {refA} × {refB}, 이번은 {newA} × {newB}예요. 어떤 수가 몇 배로 바뀌었는지 보고, 이번 곱이 지난번의 10배인지, 같은지, 1/10배인지 골라 주세요. 고르고 나면 {ing}은 자동으로 계량돼요.";
+
+/* 손님 지정량 주문 (레시피 대신 손님이 정한 양) */
+export const AMOUNT_PER_ORIGINAL = [
+  "{potion} {n}병 주세요! 저는 {ing}를 1병에 {amt}씩만 넣어야 기운이 딱 맞아요.",
+  "{potion} {n}병이요. 할머니 쪽지에 '1병에 {ing} {amt}씩'이라고 적혀 있어요. 그대로 부탁해요!",
+];
+export const AMOUNT_PER_EASY =
+  "이번 주문은 레시피북의 양 대신 손님이 정한 양을 써요. 1병에 {ing} {amt}씩, {n}병이에요. {amt}을 {n}번 모은 만큼 넣으면 돼요. 기본 용액은 자동으로 맞춰져요.";
+export const AMOUNT_BASE_ORIGINAL = [
+  "{potion} 1병이요. 우리 집 비법에서는 {ing}를 {amt} 넣는데, 오늘은 그 {m}배로 부탁해요.",
+  "{potion} 1병 주세요. 제가 늘 쓰는 {ing} 양은 {amtIs} 이번엔 그 {m}배만큼 넣어 주세요.",
+];
+export const AMOUNT_BASE_EASY =
+  "이번 주문은 레시피북의 양 대신 손님이 알려 준 {ing} {amt}을 기준으로 해요. 그 {m}배를 넣어 주세요. {m}배는 {m}을 곱한다는 뜻이에요. {compare} 기본 용액은 자동으로 맞춰져요.";
 
 /** 특별 주문 규칙 (주문 메모에 항상 표시) */
 export const LIFE_RULE_NOTE = "특별 주문 규칙: 계산한 숫자만 재료량으로 써요. 단위를 바꾸는 계산이 아니에요.";

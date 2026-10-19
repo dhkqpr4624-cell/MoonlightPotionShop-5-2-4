@@ -55,9 +55,12 @@ test("3B 오답: 입력값 유지·확정, 그 양으로 투입, 해설은 실�
   assert.equal(s.review.length, 1, "오답은 복습 후보");
 });
 
-test("3B 품질별 판매금 100%·80%·60% (정수, 소수 버림), 힌트·'네?'는 감액 없음", () => {
+test("3B 품질별 판매금 100%·80%·60% (이전 레시피 2재료 주문, 정수, 소수 버림), 힌트·'네?'는 감액 없음", () => {
   for (const [wrong, q, pct] of [[[], "great", 100], [[1], "okay", 80], [[0, 1], "poor", 60]] as const) {
     let s = run(createInitialState(), { type: "START", seed: 50 });
+    const first = order(s);
+    const legacy = { ...createOrderFromKey("multiBottle:starlight:3", { orderNumber: 1, customerId: first.customerId, rng: createRng(1), recipes: [RECIPES.starlight] }), status: "arrived" as const };
+    s = { ...s, day: { ...s.day!, orders: [legacy, ...s.day!.orders.slice(1)] } };
     s = run(s, { type: "ASK_AGAIN", orderId: order(s).id }, { type: "ASK_AGAIN", orderId: order(s).id });
     const price = order(s).price;
     s = serveCurrent(s, { wrong: [...wrong], hint: true });
@@ -117,7 +120,7 @@ test("3C '네?'는 주문 숫자·조건·보상을 바꾸지 않고, 쉬운 설
 });
 
 test("3C 생활 소재: 14.35g × 10 특별 문제, 단위 변환이 아니라는 규칙, 지정량 과제는 계산 집계 제외", () => {
-  const o = createOrderFromKey("life:chocolate:14.35:10", { orderNumber: 1, customerId: "fox", rng: createRng(1) });
+  const o = createOrderFromKey("life:chocolate:14.35:10", { orderNumber: 1, customerId: "fox", rng: createRng(1), recipes: [RECIPES.starlight] });
   const calc = o.tasks.find((t) => t.mode === "calc")!;
   const spec = o.tasks.find((t) => t.mode === "specified")!;
   assert.equal(calc.ingredientId, "moonDew");
@@ -139,7 +142,7 @@ test("3C 생활 소재: 14.35g × 10 특별 문제, 단위 변환이 아니라�
 });
 
 test("3C 비교(⑦) 주문: 선택형 개념 문제, 결과 후 양은 자동 계량, 품질은 개념 정오로", () => {
-  const o = createOrderFromKey("shift:2.4:3:aD10", { orderNumber: 1, customerId: "wolf", rng: createRng(1) });
+  const o = createOrderFromKey("shift:2.4:3:aD10", { orderNumber: 1, customerId: "wolf", rng: createRng(1), recipes: [RECIPES.starlight] });
   const c = o.tasks[0];
   assert.equal(c.mode, "concept");
   assert.equal(c.concept!.correct, "d10");
@@ -174,8 +177,9 @@ test("3C 하루 구성: 특별 주문 제한·첫 손님 일반·일반 주문 2
     assert.ok(kinds.filter((k) => k === "lifeItem").length <= 1, `day ${d + 1} life`);
     assert.ok(kinds.filter((k) => k === "pointShift").length <= 1, `day ${d + 1} shift`);
     assert.ok(os.filter((o) => o.reviewCandidateId).length <= 1, `day ${d + 1} review`);
-    assert.ok(kinds[0] === "multiBottle" || kinds[0] === "customMultiplier", `day ${d + 1} 첫 손님`);
-    assert.ok(kinds.filter((k) => k === "multiBottle" || k === "customMultiplier").length >= 2);
+    const normal = (k: string) => k === "multiBottle" || k === "customMultiplier" || k === "customAmount";
+    assert.ok(normal(kinds[0]), `day ${d + 1} 첫 손님`);
+    assert.ok(kinds.filter(normal).length >= 2);
     // 소개된 유형 안에서만
     const intro = introducedTypes(s.day!.introStage);
     for (const o of os) for (const t of o.tasks) if (t.problem.learningType) assert.ok(intro.includes(t.problem.learningType), `${t.problem.learningType}`);

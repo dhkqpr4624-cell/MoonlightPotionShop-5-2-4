@@ -3,10 +3,11 @@
  *
  * 제조 단계(주문 상태 brewing 안에서)
  *   재료를 솥에 놓기(PLACE_INGREDIENT) → 계량 문제 → 답 확정(SUBMIT_*) → 결과 확인 → 투입(ADD_TO_CAULDRON)
- *   → 두 재료 투입 → 젓기(STIR, 누적) → 병에 담기(COMPLETE_POTION: 품질·보상 확정) → 전달(DELIVER: 1회 지급)
+ *   → 레시피의 모든 재료 투입(재료 수는 레시피가 정함, 기력 포션은 1개) → 젓기(STIR, 누적) → 병에 담기(COMPLETE_POTION: 품질·보상 확정) → 전달(DELIVER: 1회 지급)
  *
  * 한 번만 일어나야 하는 행동은 대상 주문 ID나 일차를 함께 보내고, 현재 상태와 맞지 않으면 무시한다.
  */
+import { normalizeUnlocked, tryUnlock } from "./unlocks.ts";
 import { getIngredient } from "../data/ingredients.ts";
 import { MAX_INTRO_STAGE, INTRO_STAGES } from "../data/learningTypes.ts";
 import { applyKey, validateAnswerInput, type InputKey } from "../lib/answerInput.ts";
@@ -54,11 +55,13 @@ export type Action =
   | { type: "DELIVER"; orderId: string; now: string }
   | { type: "NEXT_CUSTOMER"; fromOrderId: string }
   | { type: "CLOSE_DAY"; dayNumber: number; now: string }
-  | { type: "NEXT_DAY"; fromDay: number; seed: number };
+  | { type: "NEXT_DAY"; fromDay: number; seed: number }
+  /** 재료 해금(영업 중이 아닐 때만). 가격은 내부 데이터에서 읽는다 */
+  | { type: "UNLOCK_INGREDIENT"; ingredientId: string };
 
 export function createInitialState(): GameState {
   return {
-    saveVersion: 3,
+    saveVersion: 4,
     scene: "title",
     money: 0,
     nextOrderNumber: 1,
@@ -75,6 +78,7 @@ export function createInitialState(): GameState {
     dayHistory: [],
     stats: { ordersCompleted: 0, potionsSold: 0, problemsSolved: 0 },
     paidOrderIds: [],
+    unlockedIngredients: normalizeUnlocked([]),
   };
 }
 
@@ -104,6 +108,7 @@ function openDay(state: GameState, dayNumber: number, introStage: number, newTyp
   const rng = createRng(seed);
   const made = planDay({
     dayNumber, introStage, newTypes, decks: state.decks, nextOrderNumber: state.nextOrderNumber, review: state.review, rng,
+    unlocked: state.unlockedIngredients,
   });
   return {
     ...state,
@@ -450,6 +455,14 @@ export function reducer(state: GameState, action: Action): GameState {
       const stage = Math.min(MAX_INTRO_STAGE, day.introStage + 1);
       const newTypes = stage > day.introStage ? INTRO_STAGES[stage] : [];
       return openDay(state, day.dayNumber + 1, stage, newTypes, action.seed);
+    }
+
+    case "UNLOCK_INGREDIENT": {
+      // 영업 중(주문을 받는 중)에는 사지 않는다. 마감 뒤나 영업 전에만
+      if (day && day.status === "open") return state;
+      const r = tryUnlock(state.money, state.unlockedIngredients, action.ingredientId);
+      if (!r.ok) return state; // 없는 재료·이미 해금·잔액 부족: 아무것도 바꾸지 않음 (중복 차감 없음)
+      return { ...state, money: r.money, unlockedIngredients: r.unlocked };
     }
 
     default:

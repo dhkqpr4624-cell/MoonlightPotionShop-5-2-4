@@ -181,6 +181,7 @@ export default function App() {
             onNextDay={nextDay}
             onTitle={() => dispatch({ type: "GO_TITLE" })}
             busy={shutterFx !== null}
+            onUnlock={(ingredientId) => dispatch({ type: "UNLOCK_INGREDIENT", ingredientId })}
           />
         )}
       </main>

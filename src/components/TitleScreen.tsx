@@ -96,7 +96,9 @@ export function TitleScreen({
         <>
           {migratedFrom !== null && (
             <p className="title-notice" role="status" data-testid="migrated-notice">
-              이전 버전(Phase {migratedFrom})의 저장을 새 형식으로 옮겼어요. 달빛 동전과 학습 기록은 그대로예요. 진행 중이던 하루는 이전 규칙으로 마치고, 다음 영업부터 새 규칙이 적용돼요.
+              {migratedFrom === 3
+                ? "이전 저장을 새 형식으로 옮겼어요. 달빛 동전·일차·학습 기록은 그대로예요. 진행 중이던 하루는 그때 받은 주문 그대로 마치고, 다음 영업부터는 기력 포션 주문이 나와요. 기력초는 처음부터 쓸 수 있어요."
+                : `이전 버전(Phase ${migratedFrom})의 저장을 새 형식으로 옮겼어요. 달빛 동전과 학습 기록은 그대로예요. 진행 중이던 하루는 이전 규칙으로 마치고, 다음 영업부터 새 규칙이 적용돼요.`}
             </p>
           )}
           <button type="button" className="btn btn-primary btn-big btn-start" onClick={onStart} data-testid="start" data-sfx={state.day ? "click" : "none"}>
