@@ -7,16 +7,15 @@
  *  - legacy 재료는 이전 버전 레시피(별빛·용기·새싹·안개) 전용이다. 진행 중이던 하루를 마칠 때만 쓰고,
  *    재료 해금 메뉴에 팔지 않는다.
  *
- * drawer: 제작대 위쪽 서랍 번호(data/shopArt.ts WORKBENCH_SCENE.drawers). 0이 맨 왼쪽 위.
- *   0 기력초(무료) · 1 깃털풀 · 2 바람 정령의 파편 · 3·4 이전 버전 재료(진행 중이던 이전 주문을 마칠 때만 놓임) · 5 비어 있음
+ * drawer: 제작대 재료 칸 번호(data/shopArt.ts WORKBENCH_SCENE.drawers). 0이 맨 왼쪽 위.
+ *   위 6칸(0~5) · 아래 8칸(6~13) · 왼쪽 빈 그릇(14) = 15칸. 재료 15종이 한 칸씩 쓴다.
+ *   이전 버전 재료(달빛 이슬·별가루)는 진행 중이던 이전 주문을 마치는 동안만 12·13번 칸에 잠시 놓인다(그동안 그 칸의 재료는 숨김).
  *
- * 해금 가격 근거 (실제 출제기로 하루 주문 2,000개씩 계산한 평균 정상 판매금)
- *   1일차(①② 소개) 약 132, 2일차 이후 약 110 / 모두 오답(60%)이면 약 79, 약 66
- *   → 깃털풀 70 + 바람 정령의 파편 110 = 180: 모두 정답이면 1~2일, 모두 오답이어도 3일이면 둘 다 살 수 있다.
+ * 해금 가격 근거: scripts/balance30.ts 로 실제 출제기·판매가·품질 규칙을 써서 30일 영업을 흉내 낸 결과
+ *   (docs/RECIPES_SHOP_REPORT.md '30일 밸런스'). 다음 구매 목표는 '필요한 미보유 재료가 가장 적은 레시피'.
  */
-
 export type Unit = "mL" | "g";
-export type IngredientKind = "liquid" | "powder" | "herb" | "crystal";
+export type IngredientKind = "liquid" | "powder" | "herb" | "crystal" | "flower" | "scale" | "stone" | "extract";
 
 export interface Ingredient {
   id: string;
@@ -67,6 +66,18 @@ export const INGREDIENTS: Record<string, Ingredient> = {
     drawer: 2,
     unlockCost: 110,
   },
+  ogreSinew: { id: "ogreSinew", name: "오거의 힘줄 추출물", unit: "g", kind: "extract", color: "#8a9a3a", description: "오거의 질긴 힘줄을 달여 짜낸 올리브빛 추출물", drawer: 3, unlockCost: 130 },
+  lilyStamen: { id: "lilyStamen", name: "은백합 꽃술", unit: "g", kind: "flower", color: "#f4f0d8", description: "은빛 백합 가운데에서 모은 금빛 꽃술", drawer: 4, unlockCost: 150 },
+  lifeSap: { id: "lifeSap", name: "생명의 나무 수액", unit: "g", kind: "extract", color: "#e8a640", description: "오래된 생명의 나무에서 흘러나온 호박빛 수액", drawer: 5, unlockCost: 190 },
+  sapphireDust: { id: "sapphireDust", name: "푸른 사파이어 가루", unit: "g", kind: "powder", color: "#3d6fe0", description: "푸른 사파이어를 곱게 간 반짝이는 가루", drawer: 6, unlockCost: 240 },
+  sageWalnut: { id: "sageWalnut", name: "현자의 호두껍질 가루", unit: "g", kind: "powder", color: "#9a6a3c", description: "현자의 숲 호두나무 껍질을 말려 빻은 가루", drawer: 7, unlockCost: 260 },
+  coralPowder: { id: "coralPowder", name: "심해 산호 가루", unit: "g", kind: "powder", color: "#ff8f9e", description: "깊은 바다 산호를 곱게 간 분홍빛 가루", drawer: 8, unlockCost: 290 },
+  mermaidScale: { id: "mermaidScale", name: "인어의 비늘", unit: "g", kind: "scale", color: "#5fd6c8", description: "물결빛이 도는 얇고 투명한 인어의 비늘", drawer: 9, unlockCost: 310 },
+  dragonScale: { id: "dragonScale", name: "붉은 용의 비늘 가루", unit: "g", kind: "powder", color: "#d8402c", description: "붉은 용이 벗어 둔 비늘을 빻은 뜨거운 가루", drawer: 10, unlockCost: 340 },
+  sulfurStone: { id: "sulfurStone", name: "화산 유황석", unit: "g", kind: "stone", color: "#e8c53a", description: "화산 곁에서 캐낸, 노랗게 빛나는 유황 돌", drawer: 11, unlockCost: 360 },
+  nightBloom: { id: "nightBloom", name: "칠흑의 밤꽃", unit: "g", kind: "flower", color: "#3a2450", description: "달 없는 밤에만 피는 칠흑빛 꽃잎", drawer: 12, unlockCost: 340 },
+  chameleonTail: { id: "chameleonTail", name: "카멜레온 도마뱀의 꼬리 진액", unit: "g", kind: "extract", color: "#7ac47a", description: "보는 쪽에 따라 빛깔이 바뀌는 끈끈한 진액", drawer: 13, unlockCost: 360 },
+  shadowDust: { id: "shadowDust", name: "그림자 정령의 가루", unit: "g", kind: "powder", color: "#4a3a66", description: "그림자 정령이 지나간 자리에 남은 보랏빛 검은 가루", drawer: 14, unlockCost: 380 },
   moonDew: {
     id: "moonDew",
     name: "달빛 이슬",
@@ -74,7 +85,7 @@ export const INGREDIENTS: Record<string, Ingredient> = {
     kind: "liquid",
     color: "#8fd3ff",
     description: "보름달 아래 풀잎에 맺힌 푸른 이슬",
-    drawer: 3,
+    drawer: 12,
     unlockCost: 0,
     legacy: true,
   },
@@ -85,7 +96,7 @@ export const INGREDIENTS: Record<string, Ingredient> = {
     kind: "powder",
     color: "#ffe27a",
     description: "떨어진 별똥별에서 모은 반짝이는 가루",
-    drawer: 4,
+    drawer: 13,
     unlockCost: 0,
     legacy: true,
   },

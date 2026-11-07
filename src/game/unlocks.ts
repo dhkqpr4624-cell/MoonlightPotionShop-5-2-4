@@ -53,6 +53,42 @@ export function availableRecipes(unlocked: readonly string[], catalog: UnlockCat
   return Object.values(catalog.recipes).filter((r) => isRecipeAvailable(r, unlocked));
 }
 
+export interface RecipeGoal {
+  recipeId: string;
+  /** 아직 해금하지 않은 필요 재료 (싼 것부터) */
+  missing: string[];
+  /** 미보유 재료 가격 합 */
+  cost: number;
+}
+
+/**
+ * 잠긴 레시피를 '필요한 미보유 재료가 적은 것 → 그 재료 값이 싼 것' 순서로 늘어놓는다.
+ * 레시피북의 '다음 목표'와 밸런스 시뮬레이션이 같은 순서를 쓴다.
+ */
+export function recipeGoals(unlocked: readonly string[], catalog: UnlockCatalog = GAME_CATALOG): RecipeGoal[] {
+  const order = Object.keys(catalog.recipes);
+  return Object.values(catalog.recipes)
+    .filter((r) => !r.legacy && !isRecipeAvailable(r, unlocked))
+    .map((r) => {
+      const missing = requiredIngredients(r)
+        .filter((id) => !unlocked.includes(id))
+        .sort((a, b) => (catalog.ingredients[a]?.unlockCost ?? 0) - (catalog.ingredients[b]?.unlockCost ?? 0));
+      return { recipeId: r.id, missing, cost: missing.reduce((s, id) => s + (catalog.ingredients[id]?.unlockCost ?? 0), 0) };
+    })
+    .sort((a, b) => a.missing.length - b.missing.length || a.cost - b.cost || order.indexOf(a.recipeId) - order.indexOf(b.recipeId));
+}
+
+/** 다음 구매 목표: 가장 가까운 레시피의 가장 싼 미보유 재료 */
+export function nextGoal(unlocked: readonly string[], catalog: UnlockCatalog = GAME_CATALOG): { recipeId: string; ingredientId: string; missing: string[] } | null {
+  const g = recipeGoals(unlocked, catalog)[0];
+  return g ? { recipeId: g.recipeId, ingredientId: g.missing[0], missing: g.missing } : null;
+}
+
+/** 이 재료가 들어가는 (새 주문용) 레시피 */
+export function recipesUsing(ingredientId: string, catalog: UnlockCatalog = GAME_CATALOG): Recipe[] {
+  return Object.values(catalog.recipes).filter((r) => !r.legacy && requiredIngredients(r).includes(ingredientId));
+}
+
 /** 해금 목록이 before → after로 바뀔 때 새로 쓸 수 있게 된 레시피 ID */
 export function newlyAvailableRecipes(before: readonly string[], after: readonly string[], catalog: UnlockCatalog = GAME_CATALOG): string[] {
   const had = new Set(availableRecipes(before, catalog).map((r) => r.id));

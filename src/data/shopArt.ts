@@ -52,7 +52,7 @@ export const COUNTER_SCENE = {
  *
  *  pot.inner   항아리 안쪽(액체가 보이는 둥근 영역, 금속 테두리 안). 액체·막대·소용돌이는 이 타원 안에만 그린다
  *  pot.rim     드롭·젓기를 받는 범위(테두리 포함)
- *  drawers     위쪽 서랍 칸(서랍 번호 = data/ingredients.ts drawer). 0이 맨 왼쪽 위
+ *  drawers     재료 칸(번호 = data/ingredients.ts drawer). 0~5 위 서랍, 6~13 아래 서랍, 14 왼쪽 빈 그릇
  *  bottleRack  오른쪽 빈 병 받침, slab 그 아래 돌판(병에 담은 포션을 놓는 곳)
  *  book / clipboard  왼쪽 아래 레시피북, 오른쪽 아래 주문서 버튼 자리(그림 바깥 여백까지 포함한 클릭 상자)
  */
@@ -74,6 +74,17 @@ export const WORKBENCH_SCENE = {
     { x: 750, y: 40, width: 204, height: 140 },
     { x: 982, y: 40, width: 200, height: 140 },
     { x: 1204, y: 40, width: 196, height: 140 },
+    // 아래 8칸 (6~13)
+    { x: 58, y: 208, width: 152, height: 122 },
+    { x: 230, y: 208, width: 164, height: 122 },
+    { x: 418, y: 208, width: 166, height: 122 },
+    { x: 608, y: 208, width: 166, height: 122 },
+    { x: 798, y: 208, width: 148, height: 122 },
+    { x: 968, y: 208, width: 146, height: 122 },
+    { x: 1134, y: 208, width: 136, height: 122 },
+    { x: 1290, y: 208, width: 124, height: 122 },
+    // 왼쪽 빈 그릇 (14). 모든 제작대 그림의 같은 자리에 있다
+    { x: 72, y: 372, width: 128, height: 112 },
   ],
   bottleRack: { x: 1092, y: 420, width: 336, height: 222 },
   slab: { x: 1056, y: 686, width: 392, height: 158 },

@@ -24,10 +24,12 @@ import {
   type CSSProperties, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject,
 } from "react";
 import { getIngredient, type Ingredient } from "../data/ingredients.ts";
-import { shopIngredients } from "../game/unlocks.ts";
+import { nextGoal, shopIngredients } from "../game/unlocks.ts";
 import { josa } from "../lib/josa.ts";
 import { getRecipe } from "../data/recipes.ts";
 import { WORKBENCH_SCENE as WB } from "../data/shopArt.ts";
+import { BENCH_POT_INNER, decorOf, type ThemeId } from "../data/shop.ts";
+import { gadgetOn } from "../game/shop.ts";
 import { keyFromKeyboard } from "../lib/answerInput.ts";
 import { assetUrl } from "../lib/assets.ts";
 import { playSfx, startStir, stopStir, updateStir } from "../audio/sfx.ts";
@@ -39,14 +41,26 @@ import { MeasurePanel } from "./MeasurePanel.tsx";
 import { BookPopup, type BookKind } from "./BookPopup.tsx";
 import { IngredientArt, PotionBottle } from "./art/PotionArt.tsx";
 import { IngredientPile } from "./art/IngredientPile.tsx";
+import { HudCenter, HudLeft, HudRight, type HudProps } from "./SceneHud.tsx";
 
 export const POUR_MS = 1200;
 export const BOTTLE_MS = 1600;
 const DRAG_THRESHOLD = 8;
+/** 자동 솥: 0.12초마다 3% (약 4초에 다 저음) */
+const AUTO_STIR_MS = 120;
+const AUTO_STIR_STEP = 3;
 
 /** 액체 수면 (항아리 안쪽 타원보다 조금 작게: 안쪽 벽이 보이게) */
-const POT = WB.pot.inner;
-const LIQ = { cx: POT.cx, cy: POT.cy + 10, rx: POT.rx - 14, ry: POT.ry - 14 };
+/**
+ * 항아리 안쪽 타원과 액체 타원. 제작대 테마마다 항아리 테두리 두께가 달라 그림에 맞춰 바꾼다(data/shop.ts BENCH_POT_INNER).
+ * 제작대 장면은 한 번에 하나만 그리므로 그리기 시작할 때 테마에 맞춰 정한다.
+ */
+let POT: { cx: number; cy: number; rx: number; ry: number } = WB.pot.inner;
+let LIQ = { cx: POT.cx, cy: POT.cy + 10, rx: POT.rx - 14, ry: POT.ry - 14 };
+function applyPotOf(theme: ThemeId) {
+  POT = BENCH_POT_INNER[theme] ?? WB.pot.inner;
+  LIQ = { cx: POT.cx, cy: POT.cy + 10, rx: POT.rx - 14, ry: POT.ry - 14 };
+}
 const RIM = WB.pot.rim;
 
 interface Box { x: number; y: number; width: number; height: number }
@@ -105,8 +119,18 @@ interface DragInfo {
   active: boolean;
 }
 
-export function WorkbenchScene({ state, order, dispatch }: { state: GameState; order: Order; dispatch: Dispatch<Action> }) {
+export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = false }: {
+  state: GameState; order: Order; dispatch: Dispatch<Action>;
+  /** 상태 UI(처음 화면·일차·음소거·소지금·상점). 제작대에서는 머리줄 안에 놓아 위쪽 서랍을 가리지 않는다 */
+  hud?: HudProps;
+  /** 상점 창·미리보기가 열려 있음: 뒤쪽 조작·자동 젓기를 멈춘다 */
+  overlayOpen?: boolean;
+}) {
   const recipe = getRecipe(order.recipeId);
+  const benchTheme = state.shop.equipped.bench;
+  applyPotOf(benchTheme);
+  const glassesOn = gadgetOn(state.shop, "glasses");
+  const autoOn = gadgetOn(state.shop, "autoCauldron");
   const allDone = allTasksDone(order);
   const stirred = isStirred(order);
   const brewing = order.status === "brewing";
@@ -130,7 +154,8 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
   const bookBtn = useRef<HTMLButtonElement | null>(null);
   const clipBtn = useRef<HTMLButtonElement | null>(null);
   /** 책 팝업이나 '새 레시피 해금' 안내가 열려 있으면 뒤쪽 조작을 막는다 */
-  const popupOpen = popup !== null || state.recipeNotices.length > 0;
+  const goalInfo = nextGoal(state.unlockedIngredients);
+  const popupOpen = popup !== null || state.recipeNotices.length > 0 || overlayOpen;
 
   /* ---------------- 연출 (화면 효과일 뿐, 진행은 저장 상태가 결정) ---------------- */
   const [pourAnim, setPourAnim] = useState<PourEvent | null>(null);
@@ -343,6 +368,21 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
     [dispatch],
   );
 
+  /* 마녀의 자동 솥: 모든 재료를 넣은 뒤(stirMode)에만, 손으로 잡고 있지 않을 때 조금씩 젓는다.
+     기존 STIR 규칙을 그대로 쓰므로 진행률은 저장되고(새로고침해도 이어짐), 100%에서 멈추며, 병에 담기는 직접 누른다. */
+  const autoStirring = autoOn && stirMode && !holding;
+  useEffect(() => {
+    if (!autoStirring) return;
+    let ang = 0;
+    const t = window.setInterval(() => {
+      ang += 0.45;
+      swirlAngle.current = (swirlAngle.current + 14) % 360;
+      drawStick({ x: Math.cos(ang) * 0.45, y: Math.sin(ang) * 0.4 });
+      dispatch({ type: "STIR", orderId: orderIdRef.current, amount: AUTO_STIR_STEP });
+    }, AUTO_STIR_MS);
+    return () => window.clearInterval(t);
+  }, [autoStirring, dispatch, drawStick]);
+
   const toTip = (clientX: number, clientY: number): Point | null => {
     const c = toCanvas(clientX, clientY);
     if (!c) return null;
@@ -486,7 +526,9 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
 
   /* ---------------- 표시 ---------------- */
   const legacyIngs = order.tasks.map((t) => getIngredient(t.ingredientId)).filter((ing) => ing.legacy);
-  const drawerIngs = [...shopIngredients(), ...legacyIngs];
+  // 이전 버전 주문을 마치는 동안에는 그 재료가 12·13번 칸에 잠시 놓인다(그 칸의 판매 재료는 그동안 숨김)
+  const legacyDrawers = new Set(legacyIngs.map((x) => x.drawer));
+  const drawerIngs = [...shopIngredients().filter((x) => !legacyDrawers.has(x.drawer)), ...legacyIngs];
   const doneIngs = order.tasks.filter((t) => t.status === "done").map((t) => getIngredient(t.ingredientId));
   const stir = order.stirProgress / STIR_TARGET;
   const baseColor = "#7fb6c4";
@@ -498,7 +540,7 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
   const instruction: Record<string, string> = {
     place: pickedIng ? `${pickedIng.name}를 집었어요. 항아리를 눌러 넣어요.` : "서랍의 재료를 눌러 집고 항아리를 누르거나, 재료를 항아리로 끌어다 놓아요.",
     measure: "계량 패널에서 양을 정해요. 레시피북과 주문서를 다시 볼 수 있어요.",
-    stir: "막대를 잡고 움직여 포션을 저어 주세요.",
+    stir: autoOn ? "마녀의 자동 솥이 젓고 있어요. 막대를 잡고 직접 저어도 돼요." : "막대를 잡고 움직여 포션을 저어 주세요.",
     bottle: "다 저었어요! 병에 담아요.",
     bottled: bottling ? "병에 담는 중…" : "포션 완성! 창구로 가져가요.",
   };
@@ -551,6 +593,7 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
   return (
     <div className={`bench bench--top ${active !== null ? "measuring" : ""}`}>
       <header className="bench-bar" aria-label="주문 요약">
+        {hud && <HudLeft onHome={hud.onHome} homeDisabled={hud.homeDisabled || busy || active !== null} />}
         <div className="bench-order">
           <PotionBottle look={recipe.look} size={28} />
           <span data-testid="order-title">{order.script.memo[0].replace("포션: ", "")}</span>
@@ -570,10 +613,17 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
         <button type="button" className="btn btn-quiet" onClick={() => dispatch({ type: "GO_COUNTER" })} disabled={busy || active !== null || popupOpen} data-testid="to-counter-peek">
           창구 보기
         </button>
+        {hud && (
+          <div className="bench-hud">
+            <HudCenter dayLabel={hud.dayLabel} />
+            <HudRight money={hud.money} sound={hud.sound} onSound={hud.onSound} onShop={hud.onShop}
+              shopDisabled={hud.shopDisabled || busy || active !== null || !!drag?.active || holding || popup !== null} />
+          </div>
+        )}
       </header>
 
-      <div className={`bench-stage ${L.stacked ? "is-stacked" : ""}`} ref={stageRef} data-testid="bench-stage">
-        <img className="bench-table" src={assetUrl(WB.table)} alt="" draggable={false} style={rect(sceneBox)} data-testid="bench-table" />
+      <div className={`bench-stage ${L.stacked ? "is-stacked" : ""}`} ref={stageRef} style={{ ["--s" as string]: String(L.s) } as CSSProperties} data-testid="bench-stage">
+        <img className="bench-table" src={assetUrl(decorOf("bench", benchTheme).image)} alt="" draggable={false} style={rect(sceneBox)} data-testid="bench-table" />
 
         {/* 항아리 안 물약 (장면 좌표 SVG, 항아리 안쪽 타원으로 잘라 냄) */}
         <svg className="pot-fx" viewBox={`0 0 ${WB.width} ${WB.height}`} style={rect(sceneBox)} aria-hidden="true">
@@ -637,9 +687,11 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
           const owned = ing.legacy || state.unlockedIngredients.includes(ing.id);
           if (!owned) {
             const short = state.money < ing.unlockCost;
+            // 다음 목표(필요 재료가 가장 적게 남은 레시피)의 재료 칸은 금빛 테두리로 알려 준다
+            const goal = goalInfo && goalInfo.missing.includes(ing.id);
             // 칸 안쪽 전체가 잠금 해제 버튼(터치하기 쉽게). 글자 크기는 장면 배율(--s)을 따른다
             return (
-              <div key={ing.id} className="drawer-lock" style={{ ...rect(d), ["--s" as string]: String(L.s) } as CSSProperties} data-testid={`lock-${ing.id}`} data-locked="true">
+              <div key={ing.id} className={`drawer-lock ${goal ? "is-goal" : ""}`} style={{ ...rect(d), ["--s" as string]: String(L.s) } as CSSProperties} data-testid={`lock-${ing.id}`} data-locked="true" data-goal={goal ? "true" : "false"}>
                 <span className="lock-shade" aria-hidden="true" />
                 <button
                   type="button"
@@ -651,8 +703,9 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
                   data-short={short ? "true" : "false"}
                   data-sfx="none"
                 >
+                  {goal && <span className="lock-goal" data-testid={`goal-${ing.id}`}>다음 목표</span>}
                   <span className="lock-price" data-testid={`price-${ing.id}`}>
-                    <Icon name="lock" size={Math.max(13, 30 * L.s)} /> <Icon name="coin" size={Math.max(12, 28 * L.s)} /> {ing.unlockCost}
+                    <Icon name="lock" size={Math.max(11, 22 * L.s)} /> <Icon name="coin" size={Math.max(11, 22 * L.s)} /> {ing.unlockCost}
                   </span>
                   <span className="lock-buy">잠금 해제</span>
                 </button>
@@ -669,11 +722,13 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
           const label = !t ? "이번 주문에는 필요 없음" : t.status === "done" ? "넣음" : t.status === "measured" ? "계량함" : i === active ? "항아리 위" : "서랍";
           const isPicked = i >= 0 && picked === i;
           const dragging = drag?.active && drag.ingredientId === ing.id;
+          // 고수 안경: 이번 주문에 실제로 필요한 재료 칸 강조 + 기본 레시피의 1병당 양 (이번 주문의 총량·정답이 아님)
+          const baseAmt = glassesOn && t ? recipe.additives.find((ad) => ad.ingredientId === ing.id)?.amount ?? null : null;
           return (
             <button
               key={ing.id}
               type="button"
-              className={`drawer-item ${isPicked ? "is-picked" : ""} ${done || (i >= 0 && i === active) ? "is-used" : ""} ${!t ? "is-spare" : ""} ${bounce === ing.id ? "is-bounce" : ""} ${dragging ? "is-dragging" : ""} ${sparkle === ing.id ? "is-new" : ""}`}
+              className={`drawer-item ${baseAmt ? "is-glasses" : ""} ${isPicked ? "is-picked" : ""} ${done || (i >= 0 && i === active) ? "is-used" : ""} ${!t ? "is-spare" : ""} ${bounce === ing.id ? "is-bounce" : ""} ${dragging ? "is-dragging" : ""} ${sparkle === ing.id ? "is-new" : ""}`}
               style={rect(d)}
               aria-pressed={isPicked}
               aria-label={`${ing.name} (${ing.unit}) ${label}${isPicked ? ", 집음" : ""}`}
@@ -689,8 +744,13 @@ export function WorkbenchScene({ state, order, dispatch }: { state: GameState; o
               data-sfx={t ? "pick" : "none"}
             >
               <IngredientPile ing={ing} width={d.width * L.s} height={d.height * L.s * 0.8} picked={isPicked} />
+              {baseAmt && (
+                <span className="glasses-amt" data-testid={`glasses-${ing.id}`}>
+                  {order.kind === "multiBottle" ? "" : "기본 레시피 "}1병당 {baseAmt}{ing.unit}
+                </span>
+              )}
               <span className="drawer-tag">
-                {t?.status === "done" && <Icon name="check" size={13} />} {ing.name} · {ing.unit}
+                {t?.status === "done" && <Icon name="check" size={13} />} {ing.name}
               </span>
             </button>
           );

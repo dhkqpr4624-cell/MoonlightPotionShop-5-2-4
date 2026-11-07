@@ -39,10 +39,22 @@ test("재료·레시피 데이터: 서랍 배치, 해금 가격, 바람 걸음 �
     ["energyHerb", "기력초", 0, 0, "g"],
     ["featherGrass", "깃털풀", 1, 70, "g"],
     ["windShard", "바람 정령의 파편", 2, 110, "g"],
+    ["ogreSinew", "오거의 힘줄 추출물", 3, 130, "g"],
+    ["lilyStamen", "은백합 꽃술", 4, 150, "g"],
+    ["lifeSap", "생명의 나무 수액", 5, 190, "g"],
+    ["sapphireDust", "푸른 사파이어 가루", 6, 240, "g"],
+    ["sageWalnut", "현자의 호두껍질 가루", 7, 260, "g"],
+    ["coralPowder", "심해 산호 가루", 8, 290, "g"],
+    ["mermaidScale", "인어의 비늘", 9, 310, "g"],
+    ["dragonScale", "붉은 용의 비늘 가루", 10, 340, "g"],
+    ["sulfurStone", "화산 유황석", 11, 360, "g"],
+    ["nightBloom", "칠흑의 밤꽃", 12, 340, "g"],
+    ["chameleonTail", "카멜레온 도마뱀의 꼬리 진액", 13, 360, "g"],
+    ["shadowDust", "그림자 정령의 가루", 14, 380, "g"],
   ]);
   assert.ok(!Object.values(INGREDIENTS).some((i) => i.name === "바람풀"), "'바람풀'이라는 별도 재료 없음");
-  // 이전 버전 재료는 새 재료와 겹치지 않는 빈 서랍
-  assert.deepEqual([INGREDIENTS.moonDew.drawer, INGREDIENTS.starDust.drawer], [3, 4]);
+  // 이전 버전 재료(진행 중이던 옛 주문용)는 아래 줄 맨 끝 두 칸을 잠시 빌린다
+  assert.deepEqual([INGREDIENTS.moonDew.drawer, INGREDIENTS.starDust.drawer], [12, 13]);
   const w = RECIPES.wind;
   assert.equal(w.name, "바람 걸음 포션");
   assert.deepEqual(w.additives, [{ ingredientId: "featherGrass", amount: "0.4" }, { ingredientId: "windShard", amount: "0.35" }]);
@@ -291,7 +303,7 @@ test("잘못 만든 포션: 여러 병 주문은 병 수 그대로, 1병 주문�
 test("저장 v5: 새 항목 검사 (안내·첫 주문 목록은 해금된 레시피만)", () => {
   const s = run({ ...createInitialState(), money: 300 }, { type: "START", seed: 5 },
     { type: "UNLOCK_INGREDIENT", ingredientId: "featherGrass" }, { type: "UNLOCK_INGREDIENT", ingredientId: "windShard" });
-  assert.equal(s.saveVersion, 5);
+  assert.equal(s.saveVersion, 6);
   const ok = validateState(roundTrip(s));
   assert.ok(ok.ok);
   if (ok.ok) assert.deepEqual(ok.state, s);
@@ -318,7 +330,7 @@ test("v4 저장(실제 직전 버전 코드로 만든 계량 중·젓는 중) �
     const s = l.state;
     assert.equal(l.migratedFrom, 4);
     assert.equal(store.mem.get("moonlight-potion-shop/backup-v4"), raw, "원본 백업");
-    assert.equal(s.saveVersion, 5);
+    assert.equal(s.saveVersion, 6);
     assert.equal(s.scene, v4.scene, "화면 그대로 이어감");
     assert.equal(s.money, v4.money, "돈을 보충하지 않음");
     assert.deepEqual(s.unlockedIngredients, ["energyHerb"], "새 재료는 잠김, 구매 내역 지어내지 않음");

@@ -10,7 +10,10 @@ import { ClosingScene } from "./components/ClosingScene.tsx";
 import { RecipeUnlockNotice } from "./components/RecipeUnlockNotice.tsx";
 import { LearningRecords } from "./components/LearningRecords.tsx";
 import { SoundSettings } from "./components/SoundSettings.tsx";
-import { Icon } from "./components/Icon.tsx";
+import { ShopModal, type ShopTab } from "./components/ShopModal.tsx";
+import { DecorPreview } from "./components/DecorPreview.tsx";
+import type { HudProps } from "./components/SceneHud.tsx";
+import { decorOf, type DecorSlot, type ThemeId } from "./data/shop.ts";
 import { applySoundSettings, playSfx, unlockAudio, type SfxName } from "./audio/sfx.ts";
 import { loadSoundSettings, saveSoundSettings, type SoundSettings as SoundPrefs } from "./audio/settings.ts";
 
@@ -52,6 +55,9 @@ export default function App() {
   const [shutterFx, setShutterFx] = useState<ShutterFx>(null);
   const [showRecords, setShowRecords] = useState(false);
   const [sound, setSound] = useState<SoundPrefs>(loadSoundSettings);
+  const [shopOpen, setShopOpen] = useState(false);
+  const [shopTab, setShopTab] = useState<ShopTab>("gadget");
+  const [preview, setPreview] = useState<{ slot: DecorSlot; theme: ThemeId } | null>(null);
 
   const changeSound = useCallback((next: SoundPrefs) => {
     setSound(next);
@@ -125,30 +131,40 @@ export default function App() {
   };
 
   const endFx = useCallback(() => setShutterFx(null), []);
+  const closeShop = useCallback(() => setShopOpen(false), []);
+  // 미리보기를 닫으면 상점 창으로 돌아간다 (장착 상태는 바뀌지 않았으므로 원래 모습 그대로)
+  const backFromPreview = useCallback(() => {
+    setPreview(null);
+    setShopOpen(true);
+  }, []);
 
   const day = state.day;
   const order = currentOrder(state);
   const inGame = state.scene !== "title" && day !== null && order !== null;
+  const overlayOpen = shopOpen || preview !== null;
+
+  const hud: HudProps | undefined = inGame
+    ? {
+        dayLabel: `밤 ${day.dayNumber}일차 · ${day.status === "closed" ? "영업 마감" : `손님 ${day.currentIndex + 1}/${day.orders.length}`}`,
+        money: state.money,
+        sound,
+        onSound: changeSound,
+        onHome: () => {
+          setShopOpen(false);
+          setPreview(null);
+          dispatch({ type: "GO_TITLE" });
+        },
+        onShop: () => {
+          setPreview(null);
+          setShopOpen(true);
+        },
+        homeDisabled: shutterFx !== null || overlayOpen,
+        shopDisabled: shutterFx !== null || overlayOpen || state.activeTask !== null,
+      }
+    : undefined;
 
   return (
     <div className="app">
-      {inGame && (
-        <header className="top-bar">
-          <button type="button" className="btn btn-ghost small" onClick={() => dispatch({ type: "GO_TITLE" })} disabled={shutterFx !== null}>
-            <Icon name="home" size={18} /> 처음 화면
-          </button>
-          <div className="day-badge" data-testid="day-badge">
-            밤 {day.dayNumber}일차 · {day.status === "closed" ? "영업 마감" : `손님 ${day.currentIndex + 1} / ${day.orders.length}`}
-          </div>
-          <div className="top-right">
-            <SoundSettings value={sound} onChange={changeSound} />
-            <div className="money" data-testid="money" aria-label={`달빛 동전 ${state.money}개`}>
-              <Icon name="coin" size={22} />
-              <span data-testid="money-value">{state.money}</span>
-            </div>
-          </div>
-        </header>
-      )}
       <main className="stage">
         {!inGame && showRecords && <LearningRecords state={state} onBack={() => setShowRecords(false)} />}
         {!inGame && !showRecords && (
@@ -171,9 +187,11 @@ export default function App() {
             opening={shutterFx === "opening"}
             onOpenEnd={endFx}
             onCloseDay={closeDay}
+            equipped={state.shop.equipped}
+            hud={hud}
           />
         )}
-        {inGame && state.scene === "workbench" && <WorkbenchScene state={state} order={order} dispatch={dispatch} />}
+        {inGame && state.scene === "workbench" && <WorkbenchScene state={state} order={order} dispatch={dispatch} hud={hud} overlayOpen={overlayOpen} />}
         {inGame && state.scene === "closing" && (
           <ClosingScene
             state={state}
@@ -182,10 +200,45 @@ export default function App() {
             onNextDay={nextDay}
             onTitle={() => dispatch({ type: "GO_TITLE" })}
             busy={shutterFx !== null}
+            hud={hud}
           />
         )}
         {/* 새 레시피 해금 안내: 확인할 때까지 게임 화면 위에 (저장된 안내라 이어하기 때도 다시 뜬다) */}
-        {inGame && state.recipeNotices.length > 0 && !shutterFx && (
+        {inGame && shopOpen && !preview && (
+          <ShopModal
+            state={state}
+            tab={shopTab}
+            onTab={setShopTab}
+            onBuy={(itemId) => dispatch({ type: "BUY_ITEM", itemId })}
+            onEquip={(slot, theme) => dispatch({ type: "EQUIP_DECOR", slot, theme })}
+            onGadget={(id, on) => dispatch({ type: "SET_GADGET", id, on })}
+            onPreview={(slot, theme) => {
+              setShopOpen(false);
+              setPreview({ slot, theme });
+            }}
+            onClose={closeShop}
+          />
+        )}
+        {inGame && preview && (
+          <DecorPreview
+            state={state}
+            slot={preview.slot}
+            theme={preview.theme}
+            onBack={backFromPreview}
+            onEquip={() => {
+              dispatch({ type: "EQUIP_DECOR", slot: preview.slot, theme: preview.theme });
+              backFromPreview();
+            }}
+            onBuy={() => {
+              const item = decorOf(preview.slot, preview.theme);
+              if (state.money < item.price || state.activeTask !== null) return;
+              dispatch({ type: "BUY_ITEM", itemId: item.id });
+              dispatch({ type: "EQUIP_DECOR", slot: preview.slot, theme: preview.theme });
+              backFromPreview();
+            }}
+          />
+        )}
+        {inGame && state.recipeNotices.length > 0 && !shutterFx && !overlayOpen && (
           <RecipeUnlockNotice
             recipeId={state.recipeNotices[0]}
             onConfirm={() => dispatch({ type: "ACK_RECIPE_NOTICE", recipeId: state.recipeNotices[0] })}

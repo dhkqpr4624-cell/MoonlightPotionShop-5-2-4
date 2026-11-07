@@ -1,6 +1,7 @@
 import type { Unit } from "../data/ingredients.ts";
 import type { LearningTypeId } from "../data/learningTypes.ts";
 import type { Quality } from "../data/customers.ts";
+import type { ThemeId } from "../data/shop.ts";
 import type { DeckState } from "../lib/deck.ts";
 
 export type { Quality } from "../data/customers.ts";
@@ -320,7 +321,7 @@ export interface DaySummary {
   reviewCorrect?: number;
   specifiedTasks?: number;
   specifiedCorrect?: number;
-  quality?: { great: number; okay: number; poor: number };
+  quality?: { great: number; good?: number; okay: number; poor: number };
   /** 판매한 포션 병 수 (모든 주문의 병 수 합. 맞춤·특별 주문은 1병) — 저장 버전 5부터 */
   potionsMade?: number;
   /** 잘못 만든 포션 병 수: 틀린 재료 과제가 하나라도 있는 주문의 병 수 합 — 저장 버전 5부터 */
@@ -329,8 +330,18 @@ export interface DaySummary {
 
 export const CUSTOMERS_PER_DAY = 5;
 
+/** 상점 (저장 버전 6부터). 상품 데이터는 data/shop.ts */
+export interface ShopState {
+  /** 산 상품 ID (편의품 "glasses"·"autoCauldron", 장식 "counter:royal" 등). 기본 장식은 넣지 않아도 늘 가진 것으로 본다 */
+  owned: string[];
+  /** 칸별로 장착한 테마 ("basic"은 기본 그림) */
+  equipped: { counter: ThemeId; wall: ThemeId; bench: ThemeId };
+  /** 편의품 켜기·끄기 (산 것만 켤 수 있다) */
+  toggles: { glasses: boolean; autoCauldron: boolean };
+}
+
 export interface GameState {
-  saveVersion: 5;
+  saveVersion: 6;
   scene: Scene;
   money: number;
   nextOrderNumber: number;
@@ -357,4 +368,5 @@ export interface GameState {
   recipeNotices: string[];
   /** 새로 해금되어 다음 영업에 처음 주문으로 넣을 레시피 ID. 주문에 넣으면 빠진다 (저장 버전 5부터) */
   featuredRecipes: string[];
+  shop: ShopState;
 }

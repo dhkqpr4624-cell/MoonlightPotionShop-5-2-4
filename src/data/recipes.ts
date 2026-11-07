@@ -17,10 +17,10 @@ export interface RecipeAdditive {
 export interface PotionLook {
   liquid: string;
   glow: string;
-  particle: "star" | "leaf" | "mist" | "spark";
-  bottle: "round" | "tall" | "flask" | "drop";
+  particle: "star" | "leaf" | "mist" | "spark" | "bubble" | "ember" | "glint" | "shade";
+  bottle: "round" | "tall" | "flask" | "drop" | "heart" | "jug" | "vial" | "gourd" | "diamond";
   /** 라벨 문양 */
-  emblem: "star" | "flame" | "leaf" | "cloud";
+  emblem: "star" | "flame" | "leaf" | "cloud" | "drop" | "heart" | "fist" | "eye" | "shield" | "wave" | "moon" | "sun";
 }
 
 export interface Recipe {
@@ -42,6 +42,8 @@ export interface Recipe {
   summary: string;
   /** 이전 버전 레시피(새 주문에 나오지 않음, 저장 호환용) */
   legacy?: boolean;
+  /** 효과 (레시피북·손님 대사에 쓰는 짧은 말, 예: "해독과 정화") */
+  effect?: string;
 }
 
 export const RECIPES: Record<string, Recipe> = {
@@ -57,6 +59,7 @@ export const RECIPES: Record<string, Recipe> = {
     specialPrice: 20,
     supports: { multiBottle: ["d1xN"], customMultiplier: ["d1xD"] },
     summary: "지친 몸에 기운을 북돋아 주는 포션이에요.",
+    effect: "기운 회복",
   },
   /**
    * 바람 걸음 포션: 깃털풀(소수 한 자리) + 바람 정령의 파편(소수 두 자리).
@@ -78,6 +81,149 @@ export const RECIPES: Record<string, Recipe> = {
     specialPrice: 24,
     supports: { multiBottle: ["d1xN", "d2xN"], customMultiplier: ["d1xD", "d2xD"] },
     summary: "발걸음을 바람처럼 가볍게 해 주는 포션이에요.",
+    effect: "가벼운 발걸음",
+  },
+  coral: {
+    id: "coral",
+    name: "산호빛 해독제",
+    baseSolution: { name: "맑은 기본 용액", amountMl: "30" },
+    additives: [
+      { ingredientId: "featherGrass", amount: "0.3" },
+      { ingredientId: "lilyStamen", amount: "0.15" },
+    ],
+    look: { liquid: "#ff8fa3", glow: "#ffd3dc", particle: "bubble", bottle: "flask", emblem: "drop" },
+    lookText: "산호빛 액체에 작은 물방울이 맑게 떠올라요",
+    glowWord: "산호빛",
+    pricePerBottle: 6,
+    specialPrice: 24,
+    supports: { multiBottle: ["d1xN", "d2xN"], customMultiplier: ["d1xD", "d2xD"] },
+    summary: "몸에 든 독을 풀고 맑게 정화해 주는 해독제예요.",
+    effect: "해독과 정화",
+  },
+  spring: {
+    id: "spring",
+    name: "회복의 샘물약",
+    baseSolution: { name: "맑은 기본 용액", amountMl: "30" },
+    additives: [
+      { ingredientId: "energyHerb", amount: "0.5" },
+      { ingredientId: "featherGrass", amount: "0.25" },
+      { ingredientId: "lifeSap", amount: "1.2" },
+    ],
+    look: { liquid: "#a8e05f", glow: "#e6ffc2", particle: "leaf", bottle: "heart", emblem: "heart" },
+    lookText: "연두빛 샘물 속에서 새잎이 돋듯 반짝여요",
+    glowWord: "샘물빛",
+    pricePerBottle: 7,
+    specialPrice: 28,
+    supports: { multiBottle: ["d1xN", "d2xN"], customMultiplier: ["d1xD", "d2xD"] },
+    summary: "다친 곳을 빠르게 아물게 하는 응급 재생약이에요.",
+    effect: "응급 재생",
+  },
+  giant: {
+    id: "giant",
+    name: "거인의 활력수",
+    baseSolution: { name: "맑은 기본 용액", amountMl: "30" },
+    additives: [
+      { ingredientId: "energyHerb", amount: "0.9" },
+      { ingredientId: "ogreSinew", amount: "0.75" },
+    ],
+    look: { liquid: "#c9772f", glow: "#ffd2a0", particle: "spark", bottle: "jug", emblem: "fist" },
+    lookText: "구릿빛 액체가 묵직하게 출렁여요",
+    glowWord: "구릿빛",
+    pricePerBottle: 6,
+    specialPrice: 24,
+    supports: { multiBottle: ["d1xN", "d2xN"], customMultiplier: ["d1xD", "d2xD"] },
+    summary: "무거운 짐도 거뜬히 들게 힘을 북돋는 활력수예요.",
+    effect: "근력과 중량 강화",
+  },
+  hawk: {
+    id: "hawk",
+    name: "매의 눈",
+    baseSolution: { name: "맑은 기본 용액", amountMl: "30" },
+    additives: [
+      { ingredientId: "featherGrass", amount: "0.7" },
+      { ingredientId: "energyHerb", amount: "0.45" },
+      { ingredientId: "sapphireDust", amount: "0.2" },
+    ],
+    look: { liquid: "#f2c94c", glow: "#fff1b8", particle: "glint", bottle: "vial", emblem: "eye" },
+    lookText: "금빛 액체 속에서 날카로운 빛이 번뜩여요",
+    glowWord: "금빛",
+    pricePerBottle: 7,
+    specialPrice: 28,
+    supports: { multiBottle: ["d1xN", "d2xN"], customMultiplier: ["d1xD", "d2xD"] },
+    summary: "먼 곳까지 또렷하게 보이고 겨눈 곳을 놓치지 않게 해 줘요.",
+    effect: "시야와 명중률 강화",
+  },
+  iron: {
+    id: "iron",
+    name: "강철의 의지",
+    baseSolution: { name: "맑은 기본 용액", amountMl: "30" },
+    additives: [
+      { ingredientId: "energyHerb", amount: "0.8" },
+      { ingredientId: "sageWalnut", amount: "0.65" },
+      { ingredientId: "sapphireDust", amount: "1.5" },
+    ],
+    look: { liquid: "#6f86d6", glow: "#cdd8ff", particle: "glint", bottle: "gourd", emblem: "shield" },
+    lookText: "강철빛 푸른 액체가 단단하게 빛나요",
+    glowWord: "강철빛",
+    pricePerBottle: 7,
+    specialPrice: 28,
+    supports: { multiBottle: ["d1xN", "d2xN"], customMultiplier: ["d1xD", "d2xD"] },
+    summary: "흔들리지 않게 마음을 붙잡아 주고 혼란을 막아 줘요.",
+    effect: "정신 집중과 혼란 저항",
+  },
+  storm: {
+    id: "storm",
+    name: "폭풍의 숨결",
+    baseSolution: { name: "맑은 기본 용액", amountMl: "30" },
+    additives: [
+      { ingredientId: "windShard", amount: "0.55" },
+      { ingredientId: "coralPowder", amount: "1.6" },
+      { ingredientId: "mermaidScale", amount: "0.85" },
+    ],
+    look: { liquid: "#2f9fd6", glow: "#bfeaff", particle: "bubble", bottle: "drop", emblem: "wave" },
+    lookText: "짙푸른 액체 속에서 거품이 소용돌이쳐요",
+    glowWord: "바닷빛",
+    pricePerBottle: 7,
+    specialPrice: 28,
+    supports: { multiBottle: ["d1xN", "d2xN"], customMultiplier: ["d1xD", "d2xD"] },
+    summary: "물속에서도 숨을 쉬고 거센 물살을 견디게 해 줘요.",
+    effect: "수중 호흡과 저항",
+  },
+  shadow: {
+    id: "shadow",
+    name: "그림자 은신약",
+    baseSolution: { name: "맑은 기본 용액", amountMl: "30" },
+    additives: [
+      { ingredientId: "nightBloom", amount: "1.4" },
+      { ingredientId: "chameleonTail", amount: "0.95" },
+      { ingredientId: "shadowDust", amount: "0.24" },
+    ],
+    look: { liquid: "#5a3f8f", glow: "#cbb8f0", particle: "shade", bottle: "diamond", emblem: "moon" },
+    lookText: "보랏빛 어둠이 병 안에서 일렁여요",
+    glowWord: "어스름빛",
+    pricePerBottle: 7,
+    specialPrice: 28,
+    supports: { multiBottle: ["d1xN", "d2xN"], customMultiplier: ["d1xD", "d2xD"] },
+    summary: "몸의 윤곽을 흐릿하게 만들어 그림자 속에 숨게 해 줘요.",
+    effect: "형체 흐리기",
+  },
+  sun: {
+    id: "sun",
+    name: "태양의 심장",
+    baseSolution: { name: "맑은 기본 용액", amountMl: "30" },
+    additives: [
+      { ingredientId: "energyHerb", amount: "1.1" },
+      { ingredientId: "dragonScale", amount: "0.32" },
+      { ingredientId: "sulfurStone", amount: "1.3" },
+    ],
+    look: { liquid: "#e8462f", glow: "#ffc59a", particle: "ember", bottle: "round", emblem: "sun" },
+    lookText: "붉은 액체 속에서 작은 불씨가 피어올라요",
+    glowWord: "불꽃빛",
+    pricePerBottle: 7,
+    specialPrice: 28,
+    supports: { multiBottle: ["d1xN", "d2xN"], customMultiplier: ["d1xD", "d2xD"] },
+    summary: "불길과 혹독한 추위를 함께 견디게 해 주는 포션이에요.",
+    effect: "화염과 추위 저항",
   },
   starlight: {
     id: "starlight",

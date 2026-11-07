@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 /** 화면 아이콘 (직접 제작한 SVG, 24×24). 이모지 대신 쓴다. currentColor를 따른다 */
 export type IconName =
   | "coin" | "moon" | "book" | "memo" | "bulb" | "save" | "records" | "sound" | "mute"
-  | "check" | "close" | "arrow" | "back" | "potion" | "home" | "settings" | "hand" | "lock" | "unlock";
+  | "check" | "close" | "arrow" | "back" | "potion" | "home" | "settings" | "hand" | "lock" | "unlock" | "bag" | "glasses" | "cauldron" | "eye";
 
 const P: Record<IconName, ReactElement> = {
   coin: (
@@ -70,6 +70,31 @@ const P: Record<IconName, ReactElement> = {
       <path d="M4 7 H 20 M4 17 H 20" />
       <circle cx="9" cy="7" r="2.5" fill="currentColor" />
       <circle cx="15" cy="17" r="2.5" fill="currentColor" />
+    </g>
+  ),
+  bag: (
+    <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+      <path d="M5 8 H19 L18 20 H6 Z" fill="currentColor" fillOpacity="0.18" />
+      <path d="M9 8 V6.5 a3 3 0 0 1 6 0 V8" strokeLinecap="round" />
+      <path d="M10 13 h4" strokeLinecap="round" />
+    </g>
+  ),
+  glasses: (
+    <g fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="7" cy="14" r="4" /><circle cx="17" cy="14" r="4" />
+      <path d="M11 14 q1 -1.5 2 0 M3 13 L2 9 M21 13 L22 9" strokeLinecap="round" />
+    </g>
+  ),
+  cauldron: (
+    <g fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round">
+      <path d="M4 10 H20 C 20 16, 17 20, 12 20 C 7 20, 4 16, 4 10 Z" fill="currentColor" fillOpacity="0.18" />
+      <path d="M3 10 H21 M7 20 L6 22 M17 20 L18 22 M12 3 C 10 5, 14 6, 12 8" strokeLinecap="round" />
+    </g>
+  ),
+  eye: (
+    <g fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M2 12 C 6 5, 18 5, 22 12 C 18 19, 6 19, 2 12 Z" />
+      <circle cx="12" cy="12" r="3" fill="currentColor" />
     </g>
   ),
   lock: (

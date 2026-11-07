@@ -11,8 +11,10 @@ import { getRecipe } from "../data/recipes.ts";
 import { SHOP_ART } from "../data/shopArt.ts";
 import { assetUrl } from "../lib/assets.ts";
 import { isLastCustomer, type Action } from "../game/reducer.ts";
-import { QUALITY_LABEL, QUALITY_PERCENT } from "../game/outcome.ts";
-import type { DayState, Order } from "../game/types.ts";
+import { percentFor, QUALITY_LABEL } from "../game/outcome.ts";
+import type { DayState, Order, ShopState } from "../game/types.ts";
+import { hudPlacement, SceneHud, type HudProps } from "./SceneHud.tsx";
+import { COUNTER_SCENE } from "../data/shopArt.ts";
 import type { Mood } from "./art/AnimalArt.tsx";
 import { PotionBottle } from "./art/PotionArt.tsx";
 import { SceneNpc, ShopScene, npcBox, useSceneLayout, type SceneLayout } from "./art/ShopScene.tsx";
@@ -23,20 +25,20 @@ export const OPEN_ANIM_MS = 1500;
 const LEAVE_MS = 700;
 
 /** 대사창 자리: 넓은 화면은 손님 오른쪽(얼굴 옆), 좁은 화면은 위쪽 가득 */
-function speechStyle(app: Appearance | null, layout: SceneLayout): { style: CSSProperties; side: boolean } {
+function speechStyle(app: Appearance | null, layout: SceneLayout, topMin: number): { style: CSSProperties; side: boolean } {
   const pad = 12;
-  if (!app || layout.narrow) return { style: { left: pad, right: pad, top: pad }, side: false };
+  if (!app || layout.narrow) return { style: { left: pad, right: pad, top: Math.max(pad, topMin) }, side: false };
   const b = npcBox(app, layout);
   const standScreenX = layout.sceneLeft + (b.left + app.display.centerX * b.k) * layout.s;
   const left = standScreenX + 200 * layout.s;
   const width = Math.min(430, layout.width - left - 16);
-  if (width < 280) return { style: { left: pad, right: pad, top: pad }, side: false };
+  if (width < 280) return { style: { left: pad, right: pad, top: Math.max(pad, topMin) }, side: false };
   const headTop = layout.sceneTop + (b.top + Math.max(0, app.display.headY - 260) * b.k) * layout.s;
-  return { style: { left, width, top: Math.max(pad, headTop) }, side: true };
+  return { style: { left, width, top: Math.max(pad, topMin, headTop) }, side: true };
 }
 
 function moodOf(order: Order): Mood {
-  if (order.status === "paid") return order.quality === "okay" ? "meh" : order.quality === "poor" ? "sad" : "happy";
+  if (order.status === "paid") return order.quality === "okay" ? "meh" : order.quality === "poor" ? "sad" : "happy"; // good·great → 기쁨
   if (order.status === "arrived" && order.askCount > 0) return "explain";
   return "order";
 }
@@ -48,7 +50,12 @@ export function CounterScene({
   opening,
   onOpenEnd,
   onCloseDay,
+  equipped,
+  hud,
 }: {
+  equipped: ShopState["equipped"];
+  /** 장면 안쪽 가장자리에 놓는 작은 상태 UI(처음 화면·일차·소리·소지금·상점) */
+  hud?: HudProps;
   day: DayState;
   order: Order;
   dispatch: Dispatch<Action>;
@@ -126,11 +133,13 @@ export function CounterScene({
   const lines =
     order.status === "arrived" ? [order.script.greet, order.script.original]
     : order.status === "brewing" ? [order.script.waiting]
-    : order.status === "bottled" ? ["와, 제 포션이에요?"]
+    : order.status === "bottled" ? [customer.lines.receive[0]]
     : [order.script.reaction ?? ""];
 
-  const speech = speechStyle(app, layout);
-  const reserveTop = speech.side ? 0 : speechBottom + 8;
+  const hudPos = hudPlacement(layout, COUNTER_SCENE.width);
+  const hudReserve = hudPos.inMargin ? 0 : hudPos.bottom + 4;
+  const speech = speechStyle(app, layout, hudPos.bottom + 6);
+  const reserveTop = Math.max(speech.side ? 0 : speechBottom + 8, hudReserve);
   const leavingApp = leaving ? appearanceOf(leaving.order) : null;
   const leavingCustomer = leaving ? getCustomer(leaving.order.customerId) : null;
   const displayName = app?.name ?? customer.name;
@@ -142,7 +151,7 @@ export function CounterScene({
       className={`counter counter--scene ${opening ? "is-opening" : ""} ${arriving ? "is-arriving" : ""} ${layout.narrow ? "is-narrow" : ""}`}
       style={{ "--scene-s": layout.s.toFixed(4) } as CSSProperties}
     >
-      <ShopScene layout={layout} shutterMode={opening ? "opening" : "open"}>
+      <ShopScene layout={layout} shutterMode={opening ? "opening" : "open"} wall={equipped.wall} counter={equipped.counter}>
         {leaving && leavingApp && leavingCustomer && (
           <SceneNpc
             key={`leave-${leaving.key}`}
@@ -195,11 +204,8 @@ export function CounterScene({
         data-testid="counter-base"
       >
         <div className="counter-top" ref={contentRef}>
-        {/* 작은 주문 요약: 손님 순서와 정상 판매가(품질 감액 전 금액)만. 자세한 주문은 손님 대사와 제작대 주문서에서 */}
+        {/* 작은 주문 요약: 정상 판매가(품질 감액 전 금액)만. 손님 순서는 위쪽 상태 표시에 있다. 자세한 주문은 손님 대사와 제작대 주문서에서 */}
         <div className="order-ticket order-ticket--mini" aria-label="주문 요약" data-testid="order-ticket">
-          <div className="ticket-row" data-testid="ticket-customer">
-            손님 <strong>{day.currentIndex + 1} / {day.orders.length}</strong>
-          </div>
           <div className="ticket-row ticket-price" data-testid="ticket-price">
             정상 판매가 <Icon name="coin" size={18} /> <strong>{order.price}G</strong>
           </div>
@@ -242,7 +248,7 @@ export function CounterScene({
                 {order.quality ? (
                   <>
                     <span className={`quality q-${order.quality}`} data-testid="quality">{QUALITY_LABEL[order.quality]}</span>{" "}
-                    정상 판매금 {order.price}의 {QUALITY_PERCENT[order.quality]}% → 달빛 동전 <strong data-testid="reward">{order.reward}</strong>개를 받았어요.
+                    정상 판매금 {order.price}의 {percentFor(order.tasks.length, order.quality)}% → 달빛 동전 <strong data-testid="reward">{order.reward}</strong>개를 받았어요.
                   </>
                 ) : (
                   <>판매 완료! 달빛 동전 <strong data-testid="reward">{order.reward}</strong>개를 받았어요.</>
@@ -263,6 +269,8 @@ export function CounterScene({
         </div>
         </div>
       </div>
+
+      {hud && <SceneHud box={hudPos.box} {...hud} homeDisabled={hud.homeDisabled} shopDisabled={hud.shopDisabled || opening || arriving} />}
 
       {celebrating && order.status === "paid" && (
         <div className="coin-pop" data-testid="coin-pop" aria-hidden="true">

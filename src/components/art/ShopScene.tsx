@@ -12,6 +12,7 @@
  */
 import { useLayoutEffect, useState, type ReactNode, type RefObject } from "react";
 import { COUNTER_SCENE as SC } from "../../data/shopArt.ts";
+import { decorOf, type ThemeId } from "../../data/shop.ts";
 import type { Appearance } from "../../data/appearances.ts";
 import { assetUrl } from "../../lib/assets.ts";
 import { Shutters, type ShutterMode } from "./Shutters.tsx";
@@ -126,7 +127,14 @@ export function npcBox(app: Appearance, layout: SceneLayout, reserveTop = 0) {
   };
 }
 
-export function ShopScene({ layout, shutterMode, children }: { layout: SceneLayout; shutterMode: ShutterMode; children?: ReactNode }) {
+/**
+ * wall·counter: 상점 꾸미기 테마(data/shop.ts). 마을길(village)은 상품이 아니라 언제나 같은 그림이다.
+ * 테마 PNG도 같은 1672×941 캔버스에 통째로 맞춘다(원본 1670~1672px, 비율 차이 0.2% 미만). 창 개구부 위치가
+ * 모든 테마에서 기본 그림과 같아(x 390~1280, 아래 끝 약 680) 손님·덧문 자리는 그대로다.
+ */
+export function ShopScene({ layout, shutterMode, children, wall = "basic", counter = "basic" }: {
+  layout: SceneLayout; shutterMode: ShutterMode; children?: ReactNode; wall?: ThemeId; counter?: ThemeId;
+}) {
   const { s } = layout;
   const o = SC.opening;
   return (
@@ -142,8 +150,8 @@ export function ShopScene({ layout, shutterMode, children }: { layout: SceneLayo
         <div className="scene-opening" style={{ left: o.x, top: o.y, width: o.width, height: o.height }}>
           <Shutters mode={shutterMode} />
         </div>
-        <img className="scene-layer scene-arch" src={assetUrl(SC.arch)} alt="" draggable={false} data-testid="scene-arch" />
-        <img className="scene-layer scene-table" src={assetUrl(SC.table)} alt="" draggable={false} />
+        <img className="scene-layer scene-arch" src={assetUrl(decorOf("wall", wall).image)} alt="" draggable={false} data-testid="scene-arch" data-theme={wall} />
+        <img className="scene-layer scene-table" src={assetUrl(decorOf("counter", counter).image)} alt="" draggable={false} data-testid="scene-table" data-theme={counter} />
       </div>
     </div>
   );

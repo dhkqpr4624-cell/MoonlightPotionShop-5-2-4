@@ -2,11 +2,13 @@
 import type { Ingredient } from "../../data/ingredients.ts";
 import { EnergyHerbPile } from "./HerbArt.tsx";
 import { FeatherGrassPile, WindShardPile } from "./WindArt.tsx";
+import { ExtraPile, hasExtraArt } from "./ExtraArt.tsx";
 import { IngredientArt } from "./PotionArt.tsx";
 
 export function IngredientPile({ ing, width, height, picked }: { ing: Ingredient; width: number; height: number; picked: boolean }) {
   if (ing.id === "featherGrass") return <FeatherGrassPile width={width} height={height} picked={picked} />;
   if (ing.id === "windShard") return <WindShardPile width={width} height={height} picked={picked} />;
+  if (hasExtraArt(ing.id)) return <ExtraPile id={ing.id} width={width} height={height} picked={picked} />;
   if (ing.kind === "herb") return <EnergyHerbPile width={width} height={height} picked={picked} />;
   return (
     <span className="drawer-legacy">

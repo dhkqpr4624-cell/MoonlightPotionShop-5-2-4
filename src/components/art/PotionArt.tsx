@@ -6,6 +6,7 @@
  */
 import { EnergyHerbIcon } from "./HerbArt.tsx";
 import { FeatherGrassIcon, WindShardIcon } from "./WindArt.tsx";
+import { ExtraIcon, hasExtraArt } from "./ExtraArt.tsx";
 import { useId, type Ref } from "react";
 import type { PotionLook } from "../../data/recipes.ts";
 import type { Ingredient } from "../../data/ingredients.ts";
@@ -31,6 +32,37 @@ function Emblem({ kind, color }: { kind: PotionLook["emblem"]; color: string }) 
           <path d="M-5 5 L 3 -3" stroke="#fff8ea" strokeWidth={1} />
         </g>
       );
+    case "drop":
+      return <path d="M0 -6 C 3 -2, 5 1, 5 3 C 5 6, 2.5 7, 0 7 C -2.5 7, -5 6, -5 3 C -5 1, -3 -2, 0 -6 Z" fill={color} />;
+    case "heart":
+      return <path d="M0 6 C -6 2, -7 -1, -7 -3 C -7 -6, -3 -7, 0 -4 C 3 -7, 7 -6, 7 -3 C 7 -1, 6 2, 0 6 Z" fill={color} />;
+    case "fist":
+      return (
+        <g fill={color}>
+          <rect x="-5" y="-3" width="10" height="8" rx="2.5" />
+          <rect x="-5" y="-6" width="3" height="4" rx="1.2" /><rect x="-1.6" y="-6.5" width="3" height="4" rx="1.2" /><rect x="1.8" y="-6" width="3" height="4" rx="1.2" />
+        </g>
+      );
+    case "eye":
+      return (
+        <g>
+          <path d="M-7 0 C -3 -5, 3 -5, 7 0 C 3 5, -3 5, -7 0 Z" fill={color} />
+          <circle r="2.2" fill="#fff8ea" /><circle r="1" fill={LINE} />
+        </g>
+      );
+    case "shield":
+      return <path d="M0 -6 L6 -4 C 6 1, 4 4, 0 6.5 C -4 4, -6 1, -6 -4 Z" fill={color} />;
+    case "wave":
+      return <path d="M-7 1 C -5 -3, -2 -3, 0 1 C 2 5, 5 5, 7 1 L7 5 L-7 5 Z" fill={color} />;
+    case "moon":
+      return <path d="M2 -6 C -4 -5, -6 3, 0 6 C -6 7, -9 0, -6 -4 C -4 -6, -1 -7, 2 -6 Z" transform="translate(2 0)" fill={color} />;
+    case "sun":
+      return (
+        <g fill={color}>
+          <circle r="3.2" />
+          {[0, 45, 90, 135, 180, 225, 270, 315].map((r) => <rect key={r} x="-0.8" y="-6.5" width="1.6" height="2.4" transform={`rotate(${r})`} />)}
+        </g>
+      );
     default:
       return <path d="M-6 3 C -8 3, -8 -1, -5 -1 C -5 -4, -1 -5, 0 -2 C 2 -4, 6 -3, 5 0 C 8 0, 8 3, 6 3 Z" fill={color} />;
   }
@@ -45,11 +77,16 @@ const BODY: Record<PotionLook["bottle"], string> = {
   tall: "M25 16 L25 28 C 16 30, 13 34, 13 40 L13 76 C 13 80, 16 82, 20 82 L40 82 C 44 82, 47 80, 47 76 L47 40 C 47 34, 44 30, 35 28 L35 16 Z",
   flask: "M25 20 L25 38 L8 74 C 6 79, 9 82, 14 82 L46 82 C 51 82, 54 79, 52 74 L35 38 L35 20 Z",
   drop: "M25 22 L25 30 C 18 40, 8 50, 8 62 C 8 74, 18 82, 30 82 C 42 82, 52 74, 52 62 C 52 50, 42 40, 35 30 L35 22 Z",
+  heart: "M30 82 C 12 68, 6 58, 6 48 C 6 38, 14 33, 22 34 L25 34 L25 22 L35 22 L35 34 L38 34 C 46 33, 54 38, 54 48 C 54 58, 48 68, 30 82 Z",
+  jug: "M24 18 L24 28 L12 32 C 9 33, 8 36, 8 40 L8 76 C 8 80, 11 82, 15 82 L45 82 C 49 82, 52 80, 52 76 L52 40 C 52 36, 51 33, 48 32 L36 28 L36 18 Z",
+  vial: "M26 14 L26 26 C 22 28, 21 30, 21 34 L21 78 C 21 81, 23 83, 26 83 L34 83 C 37 83, 39 81, 39 78 L39 34 C 39 30, 38 28, 34 26 L34 14 Z",
+  gourd: "M25 18 L25 26 C 17 28, 15 34, 18 40 C 10 44, 6 52, 6 62 C 6 74, 17 82, 30 82 C 43 82, 54 74, 54 62 C 54 52, 50 44, 42 40 C 45 34, 43 28, 35 26 L35 18 Z",
+  diamond: "M25 20 L25 30 L8 54 L30 84 L52 54 L35 30 L35 20 Z",
 };
 /** 액체 윗면 높이 */
-const LEVEL: Record<PotionLook["bottle"], number> = { round: 48, tall: 46, flask: 52, drop: 52 };
+const LEVEL: Record<PotionLook["bottle"], number> = { round: 48, tall: 46, flask: 52, drop: 52, heart: 46, jug: 44, vial: 42, gourd: 50, diamond: 50 };
 /** 라벨 위치 */
-const LABEL_Y: Record<PotionLook["bottle"], number> = { round: 60, tall: 60, flask: 66, drop: 64 };
+const LABEL_Y: Record<PotionLook["bottle"], number> = { round: 60, tall: 60, flask: 66, drop: 64, heart: 54, jug: 60, vial: 60, gourd: 64, diamond: 60 };
 
 function Stopper({ look }: { look: PotionLook }) {
   switch (look.emblem) {
@@ -74,7 +111,7 @@ function Stopper({ look }: { look: PotionLook }) {
           <path d="M30 12 C 30 6, 34 3, 40 4 C 39 9, 34 11, 30 12 Z" fill="#6cc46a" stroke={LINE} strokeWidth={1.6} />
         </g>
       );
-    default:
+    case "cloud":
       return (
         <g>
           <rect x="24" y="15" width="12" height="8" rx="2" fill="#d9c6ff" stroke={LINE} strokeWidth={2.2} />
@@ -82,6 +119,17 @@ function Stopper({ look }: { look: PotionLook }) {
           <path d="M27 10 q3 -3 6 0" fill="none" stroke="#fff" strokeWidth={1.4} />
         </g>
       );
+    default: {
+      // 새 포션: 코르크 + 포션 빛깔 보석 장식(병 모양·문양·빛깔이 모두 달라 구분된다)
+      const top = look.bottle === "vial" ? 8 : look.bottle === "jug" || look.bottle === "gourd" ? 10 : 14;
+      return (
+        <g>
+          <rect x="23" y={top + 1} width="14" height="9" rx="2.5" fill="#b07a4a" stroke={LINE} strokeWidth={2.4} />
+          <path d={`M30 ${top - 6} L35 ${top - 1} L30 ${top + 3} L25 ${top - 1} Z`} fill={look.glow} stroke={LINE} strokeWidth={1.8} strokeLinejoin="round" />
+          <path d={`M27 ${top + 5} h6`} stroke="#8a5a3c" strokeWidth={1.6} />
+        </g>
+      );
+    }
   }
 }
 
@@ -93,6 +141,10 @@ function Particles({ look, count, level }: { look: PotionLook; count: number; le
         if (look.particle === "star") return <path key={i} transform={`translate(${x} ${y}) scale(${i % 2 ? 0.6 : 0.8})`} d={STAR} fill="#fff7c2" />;
         if (look.particle === "leaf") return <path key={i} transform={`translate(${x} ${y}) rotate(${i * 40})`} d="M-3 2 C -3 -2, 1 -4, 4 -3 C 4 0, 1 3, -3 2 Z" fill="#d9ffbf" />;
         if (look.particle === "mist") return <ellipse key={i} cx={x} cy={y - 2} rx={5} ry={2.4} fill="#ffffff" opacity="0.55" />;
+        if (look.particle === "bubble") return <circle key={i} cx={x} cy={y} r={1.6 + (i % 3)} fill="none" stroke="#ffffff" strokeWidth={1.1} opacity="0.85" />;
+        if (look.particle === "ember") return <path key={i} transform={`translate(${x} ${y})`} d="M0 -3 C 2 -1, 2 1, 0 2.5 C -2 1, -2 -1, 0 -3 Z" fill="#ffd27a" />;
+        if (look.particle === "glint") return <path key={i} transform={`translate(${x} ${y}) scale(${i % 2 ? 0.5 : 0.7})`} d="M0 -5 L1 -1 L5 0 L1 1 L0 5 L-1 1 L-5 0 L-1 -1 Z" fill="#ffffff" />;
+        if (look.particle === "shade") return <ellipse key={i} cx={x} cy={y} rx={4} ry={2} fill="#1d1230" opacity="0.5" />;
         return <circle key={i} cx={x} cy={y} r={1.8 + (i % 2)} fill="#ffe08a" />;
       })}
     </g>
@@ -114,8 +166,8 @@ export function PotionBottle({
   const body = BODY[look.bottle];
   const level = LEVEL[look.bottle];
   const ly = LABEL_Y[look.bottle];
-  const glow = quality === "poor" ? 0.08 : quality === "okay" ? 0.22 : 0.42;
-  const count = quality === "poor" ? 1 : quality === "okay" ? 3 : 5;
+  const glow = quality === "poor" ? 0.08 : quality === "okay" ? 0.22 : quality === "good" ? 0.32 : 0.42;
+  const count = quality === "poor" ? 1 : quality === "okay" ? 3 : quality === "good" ? 4 : 5;
   return (
     <svg
       viewBox="0 0 60 88"
@@ -228,6 +280,7 @@ function StarDustJar({ size }: { size: number }) {
 export function IngredientArt({ ingredient, size = 64 }: { ingredient: Ingredient; size?: number }) {
   if (ingredient.id === "featherGrass") return <FeatherGrassIcon size={size} />;
   if (ingredient.id === "windShard") return <WindShardIcon size={size} />;
+  if (hasExtraArt(ingredient.id)) return <ExtraIcon id={ingredient.id} size={size} />;
   if (ingredient.kind === "herb") return <EnergyHerbIcon size={size} />;
   return ingredient.id === "starDust" ? <StarDustJar size={size} /> : <MoonDewFlask size={size} />;
 }

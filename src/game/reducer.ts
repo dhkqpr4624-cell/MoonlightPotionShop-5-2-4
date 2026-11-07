@@ -7,6 +7,8 @@
  *
  * 한 번만 일어나야 하는 행동은 대상 주문 ID나 일차를 함께 보내고, 현재 상태와 맞지 않으면 무시한다.
  */
+import type { DecorSlot, GadgetId, ThemeId } from "../data/shop.ts";
+import { defaultShop, tryBuy, tryEquip, trySetGadget } from "./shop.ts";
 import { availableRecipes, newlyAvailableRecipes, normalizeUnlocked, tryUnlock } from "./unlocks.ts";
 import { getIngredient } from "../data/ingredients.ts";
 import { MAX_INTRO_STAGE, INTRO_STAGES } from "../data/learningTypes.ts";
@@ -15,7 +17,7 @@ import { equals, parseDecimal, toDecimalString } from "../lib/decimal.ts";
 import { createRng } from "../lib/rng.ts";
 import { correctFeedback, wrongFeedback } from "./feedback.ts";
 import { planDay } from "./orderFactory.ts";
-import { qualityOf, reactionLine, rewardFor } from "./outcome.ts";
+import { qualityOf, reactionLine, rewardForOrder } from "./outcome.ts";
 import { isLearningTask, summarizeDay } from "./daySummary.ts";
 import {
   CUSTOMERS_PER_DAY,
@@ -61,11 +63,17 @@ export type Action =
   /** 재료 해금(제작대 서랍). 가격은 내부 데이터에서 읽는다. 계량 패널이 열려 있으면 무시 */
   | { type: "UNLOCK_INGREDIENT"; ingredientId: string }
   /** '새 레시피 해금' 안내 확인 */
-  | { type: "ACK_RECIPE_NOTICE"; recipeId: string };
+  | { type: "ACK_RECIPE_NOTICE"; recipeId: string }
+  /** 상점: 편의품·장식 구매 (가격은 내부 데이터). 계량 패널이 열려 있으면 무시 */
+  | { type: "BUY_ITEM"; itemId: string }
+  /** 장식 장착 (가진 것만, 돈 들지 않음) */
+  | { type: "EQUIP_DECOR"; slot: DecorSlot; theme: ThemeId }
+  /** 편의품 켜기·끄기 */
+  | { type: "SET_GADGET"; id: GadgetId; on: boolean };
 
 export function createInitialState(): GameState {
   return {
-    saveVersion: 5,
+    saveVersion: 6,
     scene: "title",
     money: 0,
     nextOrderNumber: 1,
@@ -84,6 +92,7 @@ export function createInitialState(): GameState {
     paidOrderIds: [],
     unlockedIngredients: normalizeUnlocked([]),
     recipeNotices: [],
+    shop: defaultShop(),
     featuredRecipes: [],
   };
 }
@@ -409,7 +418,7 @@ export function reducer(state: GameState, action: Action): GameState {
         return { ...state, feedback: { kind: "notice", title: "솥을 끝까지 저어야 병에 담을 수 있어요.", lines: [] } };
       }
       const quality = qualityOf(order!);
-      const reward = rewardFor(order!.price, quality);
+      const reward = rewardForOrder(order!, quality);
       return {
         ...withOrder(state, {
           ...order!,
@@ -484,6 +493,22 @@ export function reducer(state: GameState, action: Action): GameState {
         recipeNotices: [...state.recipeNotices, ...fresh.filter((id) => !state.recipeNotices.includes(id))],
         featuredRecipes: [...state.featuredRecipes, ...fresh.filter((id) => !state.featuredRecipes.includes(id))],
       };
+    }
+
+    case "BUY_ITEM": {
+      if (state.activeTask !== null) return state;
+      const r = tryBuy(state.money, state.shop, action.itemId);
+      return r.ok ? { ...state, money: r.money, shop: r.shop } : state;
+    }
+
+    case "EQUIP_DECOR": {
+      const shop = tryEquip(state.shop, action.slot, action.theme);
+      return shop ? { ...state, shop } : state;
+    }
+
+    case "SET_GADGET": {
+      const shop = trySetGadget(state.shop, action.id, action.on);
+      return shop ? { ...state, shop } : state;
     }
 
     case "ACK_RECIPE_NOTICE": {

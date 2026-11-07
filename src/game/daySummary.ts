@@ -118,6 +118,7 @@ export function summarizeDay(day: DayState, moneyAfter: number, closedAt: string
     specifiedCorrect: c.specifiedCorrect,
     quality: {
       great: paid.filter((o) => o.quality === "great").length,
+      good: paid.filter((o) => o.quality === "good").length,
       okay: paid.filter((o) => o.quality === "okay").length,
       poor: paid.filter((o) => o.quality === "poor").length,
     },

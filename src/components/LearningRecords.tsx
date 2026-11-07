@@ -66,7 +66,7 @@ export function LearningRecords({ state, onBack }: { state: GameState; onBack: (
               <div className="table-wrap">
                 <table className="data-table">
                   <thead>
-                    <tr><th>일차</th><th>손님</th><th>문제</th><th>정확</th><th>힌트</th><th>만족·아쉬움·불만족</th><th>판매금</th></tr>
+                    <tr><th>일차</th><th>손님</th><th>문제</th><th>정확</th><th>힌트</th><th>만족·대체로·아쉬움·불만족</th><th>판매금</th></tr>
                   </thead>
                   <tbody>
                     {state.dayHistory.slice().reverse().map((h) => (
@@ -76,7 +76,7 @@ export function LearningRecords({ state, onBack }: { state: GameState; onBack: (
                         <td>{h.totalProblems}</td>
                         <td>{h.firstTryCorrect}</td>
                         <td>{h.hintUsed}</td>
-                        <td>{h.quality ? `${h.quality.great}·${h.quality.okay}·${h.quality.poor}` : "-"}</td>
+                        <td>{h.quality ? `${h.quality.great}·${h.quality.good ?? 0}·${h.quality.okay}·${h.quality.poor}` : "-"}</td>
                         <td>{h.moneyEarned}</td>
                       </tr>
                     ))}

@@ -12,6 +12,8 @@ import type { DayState, GameState } from "../game/types.ts";
 import { ClosedSign } from "./art/Shutters.tsx";
 import { SceneNpc, ShopScene, useSceneLayout } from "./art/ShopScene.tsx";
 import { Icon } from "./Icon.tsx";
+import { hudPlacement, SceneHud, type HudProps } from "./SceneHud.tsx";
+import { COUNTER_SCENE } from "../data/shopArt.ts";
 import { getCustomer } from "../data/customers.ts";
 import { appearanceOf } from "../data/appearances.ts";
 
@@ -24,7 +26,9 @@ export function ClosingScene({
   onNextDay,
   onTitle,
   busy,
+  hud,
 }: {
+  hud?: HudProps;
   state: GameState;
   animate: boolean;
   onAnimEnd: () => void;
@@ -57,7 +61,7 @@ export function ClosingScene({
   const lastApp = lastOrder ? appearanceOf(lastOrder) : null;
   return (
     <div className="closing closing--scene" data-testid="closing" ref={boxRef}>
-      <ShopScene layout={layout} shutterMode={animate ? "closing" : "closed"}>
+      <ShopScene layout={layout} shutterMode={animate ? "closing" : "closed"} wall={state.shop.equipped.wall} counter={state.shop.equipped.counter}>
         {animate && lastOrder && lastApp && (
           <SceneNpc
             app={lastApp}
@@ -70,6 +74,7 @@ export function ClosingScene({
         )}
       </ShopScene>
       <ClosedSign animate={animate} />
+      {hud && <SceneHud box={hudPlacement(layout, COUNTER_SCENE.width).box} {...hud} shopDisabled={hud.shopDisabled || animate} />}
       <div className="closing-dim" aria-hidden="true" />
 
       {!animate && (

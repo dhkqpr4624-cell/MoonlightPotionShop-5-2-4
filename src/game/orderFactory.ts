@@ -11,13 +11,8 @@
  * 미리 목록으로 만든 뒤 덱에서 뽑으므로 무한 재시도가 없다.
  */
 import { pickAppearance } from "../data/appearances.ts";
-import { CUSTOMER_IDS, fillLine, getCustomer } from "../data/customers.ts";
-import {
-  AMOUNT_BASE_EASY, AMOUNT_BASE_ORIGINAL, AMOUNT_PER_EASY, AMOUNT_PER_ORIGINAL,
-  CUSTOM_EASY, CUSTOM_LESS_NOTE, CUSTOM_MORE_NOTE, CUSTOM_ORIGINAL_LESS, CUSTOM_ORIGINAL_MORE,
-  LIFE_EACH_EASY, LIFE_EACH_ORIGINAL, LIFE_RATIO_EASY, LIFE_RATIO_ORIGINAL, LIFE_RULE_NOTE,
-  MULTI_EASY, MULTI_ORIGINAL, OTHER_INGREDIENT_NOTE, SHIFT_EASY, SHIFT_ORIGINAL,
-} from "../data/dialogues.ts";
+import { customersForDay, fillLine, getCustomer, newCustomersOnDay } from "../data/customers.ts";
+import { DIALOGUES, LIFE_RULE_NOTE, styledCopula } from "../data/dialogues.ts";
 import { getIngredient } from "../data/ingredients.ts";
 import {
   classifyProduct, inRange, INTRO_STAGES, introducedTypes, type LearningTypeId,
@@ -29,7 +24,7 @@ import {
   compare, isNaturalNumber, multiplyStrings, parseDecimal, shiftPoint, toDecimalString,
 } from "../lib/decimal.ts";
 import { drawFromDeck, EMPTY_DECK, type DeckState } from "../lib/deck.ts";
-import { copula, josa } from "../lib/josa.ts";
+import { josa } from "../lib/josa.ts";
 import { randomInt, shuffle, type Rng } from "../lib/rng.ts";
 import {
   CUSTOMERS_PER_DAY,
@@ -252,6 +247,8 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
   const parts = key.split(":");
   const id = `order-${ctx.orderNumber}`;
   const customer = getCustomer(ctx.customerId);
+  const T = DIALOGUES[customer.style];
+  const qi = customer.style === "hamnida" ? 1 : customer.style === "hage" ? 2 : 0;
   const greet = pick(customer.lines.greet, ctx.rng);
   const waiting = pick(customer.lines.waiting, ctx.rng);
   const base = { id, rules: 3 as const, customerId: ctx.customerId, status: "arrived" as const, quality: null, reward: null,
@@ -261,11 +258,11 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
     const recipe = getRecipe(parts[1]);
     const n = parts[2];
     if (!isNaturalNumber(n)) throw new Error(`잘못된 병 수: ${n}`);
-    const v = { potion: recipe.name, n };
+    const v = { potion: recipe.name, n, effect: recipe.effect ?? recipe.name };
     const script: OrderScript = {
       greet, waiting, reaction: null,
-      original: fillLine(pick(MULTI_ORIGINAL, ctx.rng), v),
-      easy: fillLine(MULTI_EASY, v),
+      original: fillLine(pick(T.multiOriginal, ctx.rng), v),
+      easy: fillLine(T.multiEasy, v),
       memo: [`포션: ${recipe.name} ${n}병`, "재료: 레시피북의 1병당 양으로 " + n + "병만큼", unitMemo(recipe)],
     };
     return {
@@ -284,8 +281,8 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
     const v = { potion: recipe.name, m };
     const script: OrderScript = {
       greet, waiting, reaction: null,
-      original: fillLine(pick(less ? CUSTOM_ORIGINAL_LESS : CUSTOM_ORIGINAL_MORE, ctx.rng), v),
-      easy: fillLine(CUSTOM_EASY, { ...v, compare: fillLine(less ? CUSTOM_LESS_NOTE : CUSTOM_MORE_NOTE, v) }),
+      original: fillLine(pick(less ? T.customLess : T.customMore, ctx.rng), v),
+      easy: fillLine(T.customEasy, { ...v, compare: fillLine(less ? T.lessNote : T.moreNote, v) }),
       memo: [`포션: ${recipe.name} 1병`, `맞춤: 기본 레시피의 ${m}배로`, `기본 용액도 ${m}배로 자동 조절`],
     };
     return {
@@ -309,8 +306,8 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
       const v = { potion: recipe.name, n: b, ing: ing.name, amt };
       const script: OrderScript = {
         greet, waiting, reaction: null,
-        original: fillLine(pick(AMOUNT_PER_ORIGINAL, ctx.rng), v),
-        easy: fillLine(AMOUNT_PER_EASY, v),
+        original: fillLine(pick(T.amountPerOriginal, ctx.rng), v),
+        easy: fillLine(T.amountPerEasy, v),
         memo: [
           `포션: ${recipe.name} ${b}병 (손님 지정량 주문)`,
           `${ing.name}(${ing.unit}): 손님이 정한 1병당 ${amt}씩 ${b}병만큼 — 손님 지정이 레시피보다 우선`,
@@ -327,11 +324,11 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
       };
     }
     const less = compare(parseDecimal(b), parseDecimal("1")) < 0;
-    const v = { potion: recipe.name, m: b, ing: ing.name, amt, amtIs: copula(amt) + "." };
+    const v = { potion: recipe.name, m: b, ing: ing.name, amt, amtIs: styledCopula(amt, customer.style) + "." };
     const script: OrderScript = {
       greet, waiting, reaction: null,
-      original: fillLine(pick(AMOUNT_BASE_ORIGINAL, ctx.rng), v),
-      easy: fillLine(AMOUNT_BASE_EASY, { ...v, compare: fillLine(less ? CUSTOM_LESS_NOTE : CUSTOM_MORE_NOTE, v) }),
+      original: fillLine(pick(T.amountBaseOriginal, ctx.rng), v),
+      easy: fillLine(T.amountBaseEasy, { ...v, compare: fillLine(less ? T.lessNote : T.moreNote, v) }),
       memo: [
         `포션: ${recipe.name} 1병 (손님 지정량 주문)`,
         `${ing.name}(${ing.unit}): 손님이 알려 준 기준 ${amt}의 ${b}배 — 손님 지정이 레시피보다 우선`,
@@ -358,9 +355,9 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
       : recipe.additives[0].ingredientId;
     const target = getIngredient(targetId);
     const others = recipe.additives.filter((ad) => ad.ingredientId !== targetId).map((ad) => getIngredient(ad.ingredientId));
-    const otherNote = others.length ? fillLine(OTHER_INGREDIENT_NOTE, { other: others.map((x) => x.name).join(", ") }) : "";
+    const otherNote = others.length ? fillLine(T.otherNote, { other: others.map((x) => x.name).join(", ") }) : "";
     const v = {
-      quirk: item.quirk, item: item.name, counter: item.counter, amount: copula(`${a}${item.unit}`), a, b, lu: item.unit,
+      quirk: item.quirk[qi], item: item.name, counter: item.counter, amount: styledCopula(`${a}${item.unit}`, customer.style), a, b, lu: item.unit,
       measureWord: item.measureWord, ing: target.name, u: target.unit, potion: recipe.name,
     };
     const each = item.form === "each";
@@ -374,8 +371,8 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
     );
     const script: OrderScript = {
       greet, waiting, reaction: null,
-      original: fillLine(each ? LIFE_EACH_ORIGINAL : LIFE_RATIO_ORIGINAL, v),
-      easy: fillLine(each ? LIFE_EACH_EASY : LIFE_RATIO_EASY, v) + otherNote,
+      original: fillLine(each ? T.lifeEachOriginal : T.lifeRatioOriginal, v),
+      easy: fillLine(each ? T.lifeEachEasy : T.lifeRatioEasy, v) + otherNote,
       memo: [
         `포션: ${recipe.name} 1병 (손님 지정 특별 주문)`,
         `${target.name}(${target.unit}): ${condition} — 손님 지정이 레시피보다 우선`,
@@ -403,12 +400,13 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
       }),
       concept,
     };
-    const v = { refA: concept.refA, refB: concept.refB, p: concept.refProduct, newA: concept.newA, newB: concept.newB, ing: main.name, u: main.unit };
-    const otherNote = rest.length ? fillLine(OTHER_INGREDIENT_NOTE, { other: rest.map((ad) => getIngredient(ad.ingredientId).name).join(", ") }) : "";
+    const v = { refA: concept.refA, refB: concept.refB, p: concept.refProduct, newA: concept.newA, newB: concept.newB, ing: main.name, u: main.unit,
+      prev: `${concept.refA} × ${concept.refB} = ${concept.refProduct}${main.unit}`, now: `${concept.newA} × ${concept.newB}${main.unit}` };
+    const otherNote = rest.length ? fillLine(T.otherNote, { other: rest.map((ad) => getIngredient(ad.ingredientId).name).join(", ") }) : "";
     const script: OrderScript = {
       greet, waiting, reaction: null,
-      original: fillLine(SHIFT_ORIGINAL, v),
-      easy: fillLine(SHIFT_EASY, v) + otherNote,
+      original: fillLine(T.shiftOriginal, v),
+      easy: fillLine(T.shiftEasy, v) + otherNote,
       memo: [
         `포션: ${recipe.name} 1병 (손님 지정 특별 주문)`,
         `지난번 ${main.name}: ${concept.refA} × ${concept.refB} = ${concept.refProduct}${main.unit}`,
@@ -501,6 +499,8 @@ function drawAvoiding(deck: DeckState, keys: string[], rng: Rng, avoid: (k: stri
  * - 처음 소개되는 유형은 그날 꼭 나오게 한다
  * - 새로 해금한 레시피는 그 다음 영업에 가능하면 1건 넣는다 (featureRecipes)
  * - 생활 소재 특별 주문 최대 1건, 비교 주문 최대 1건, 복습 주문 최대 1건
+ * - 재료 3종 레시피 주문은 하루 최대 2건 (후반에도 모든 주문이 3재료가 되지 않게)
+ * - 손님은 그 일차에 열린 종족 중에서 고르고, 새 종족이 열린 첫날에는 가능하면 1명 넣는다
  * - 나머지는 여러 병·맞춤 배수 주문 (특별 주문은 첫 손님으로 두지 않음)
  */
 export function planDay(input: DayPlanInput): DayPlanResult {
@@ -581,6 +581,27 @@ export function planDay(input: DayPlanInput): DayPlanResult {
     if (j > 0) [ordered[0], ordered[j]] = [ordered[j], ordered[0]];
   }
 
+  // 손님: 그 일차에 열린 종족 중에서. 새로 열린 종족이 없으면 한 자리에 넣는다(첫 손님은 그대로)
+  const allowed = customersForDay(input.dayNumber);
+  const customerIds = ordered.map(() => allowed[randomInt(rng, allowed.length)]);
+  for (const fresh of newCustomersOnDay(input.dayNumber)) {
+    if (customerIds.includes(fresh)) continue;
+    const counts = new Map<string, number>();
+    customerIds.forEach((c) => counts.set(c, (counts.get(c) ?? 0) + 1));
+    let at = customerIds.findIndex((c, i) => i > 0 && (counts.get(c) ?? 0) > 1 && !newCustomersOnDay(input.dayNumber).includes(c));
+    if (at < 0) at = Math.min(1, customerIds.length - 1);
+    customerIds[at] = fresh;
+  }
+
+  // 재료 3종 레시피 주문 수 제한
+  const recipeOfKey = (k: string): Recipe | null => {
+    const [p0, rid] = k.split(":");
+    return p0 === "multiBottle" || p0 === "custom" || p0 === "amount" ? getRecipe(rid) : null;
+  };
+  const isTriple = (k: string) => (recipeOfKey(k)?.additives.length ?? 0) >= 3;
+  const smallRecipes = recipes.filter((r) => r.additives.length < 3);
+  let triples = 0;
+
   // 키 뽑기 → 주문 만들기
   const orders: Order[] = [];
   let n = input.nextOrderNumber;
@@ -592,8 +613,10 @@ export function planDay(input: DayPlanInput): DayPlanResult {
     if (slot.keys) {
       // 정해진 후보(새 유형·복습) 중에서: 최근에 낸 키와 직전 병 수는 가능하면 피한다
       const recent = new Set(Object.values(decks).map((d) => d.lastDrawn));
-      const good = slot.keys.filter((k) => !recent.has(k) && !(bottlesOfKey(k) !== null && bottlesOfKey(k) === lastBottles));
-      key = pick(good.length ? good : slot.keys, rng);
+      const capped = triples >= MAX_TRIPLE_PER_DAY ? slot.keys.filter((k) => !isTriple(k)) : slot.keys;
+      const base = capped.length ? capped : slot.keys;
+      const good = base.filter((k) => !recent.has(k) && !(bottlesOfKey(k) !== null && bottlesOfKey(k) === lastBottles));
+      key = pick(good.length ? good : base, rng);
       const kk = keyKind(key);
       const d = decks[kk] ?? EMPTY_DECK;
       decks[kk] = { remaining: d.remaining.filter((x) => x !== key), lastDrawn: key };
@@ -601,15 +624,19 @@ export function planDay(input: DayPlanInput): DayPlanResult {
       const kind = slot.kind as OrderKind;
       const keys = keysOf(kind);
       if (!keys.length) throw new Error(`출제할 수 있는 ${kind} 주문이 없습니다.`);
-      const r = drawAvoiding(decks[kind] ?? EMPTY_DECK, keys, rng, (k) => bottlesOfKey(k) !== null && bottlesOfKey(k) === lastBottles);
+      const full = triples >= MAX_TRIPLE_PER_DAY;
+      const r = drawAvoiding(decks[kind] ?? EMPTY_DECK, keys, rng,
+        (k) => (full && isTriple(k)) || (bottlesOfKey(k) !== null && bottlesOfKey(k) === lastBottles));
       key = r.key;
       decks[kind] = r.deck;
     }
     if (bottlesOfKey(key)) lastBottles = bottlesOfKey(key);
     else lastBottles = null;
 
-    const customerId = CUSTOMER_IDS[randomInt(rng, CUSTOMER_IDS.length)];
-    let order = createOrderFromKey(key, { orderNumber: n, customerId, rng, recipes });
+    const customerId = customerIds[i];
+    const pool = triples >= MAX_TRIPLE_PER_DAY && smallRecipes.length ? smallRecipes : recipes;
+    let order = createOrderFromKey(key, { orderNumber: n, customerId, rng, recipes: pool });
+    if (getRecipe(order.recipeId).additives.length >= 3) triples++;
     // 외형은 문제 난수와 따로, 주문 번호로 정한다. 바로 앞 손님과 같은 외형은 피한다
     const appearanceId = pickAppearance(customerId, n, lastAppearance);
     if (appearanceId) order = { ...order, appearanceId };
@@ -630,6 +657,9 @@ export function planDay(input: DayPlanInput): DayPlanResult {
   }
   return { orders, decks, nextOrderNumber: n, reviewCandidateId, featured };
 }
+
+/** 재료 3종 레시피 주문의 하루 최대 건수 */
+export const MAX_TRIPLE_PER_DAY = 2;
 
 export function keyKind(key: string): OrderKind {
   const p = key.split(":")[0];

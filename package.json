@@ -1,8 +1,8 @@
 {
   "name": "moonlight-potion-shop",
   "private": true,
-  "version": "0.6.0",
-  "description": "달빛 포션 상점 — 초등 5학년 2학기 '소수의 곱셈' 연습 2D 웹게임 (4단계: 가게·손님 그래픽, 직접 젓기, 연출·효과음)",
+  "version": "0.7.0",
+  "description": "달빛 포션 상점 — 초등 5학년 2학기 '소수의 곱셈' 연습 2D 웹게임 (레시피 10종·재료 서랍 15칸·상점과 꾸미기)",
   "type": "module",
   "engines": {
     "node": ">=22.18.0"

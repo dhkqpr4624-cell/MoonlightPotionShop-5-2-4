@@ -130,7 +130,7 @@ test("3C 생활 소재: 14.35g × 10 특별 문제, 단위 변환이 아니라�
   assert.equal(spec.problem.learningType, null);
   assert.equal(spec.problem.answer, RECIPES[o.recipeId].additives[1].amount);
   assert.ok(o.script.memo.includes(LIFE_RULE_NOTE));
-  assert.match(o.script.original, /초콜릿 1개가 14\.35g이에요/);
+  assert.match(o.script.original, /꿀과자 하나가 14\.35g이오/);
   assert.match(o.script.easy, /단위를 바꾸는 계산이 아니라/);
   assert.doesNotMatch(o.script.easy + o.script.original, /변환/);
   assert.equal(o.price, 20);
