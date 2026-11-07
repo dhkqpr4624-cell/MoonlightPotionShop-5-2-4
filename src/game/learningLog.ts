@@ -16,6 +16,7 @@ export const KIND_LABEL: Record<OrderKind, string> = {
   customAmount: "손님 지정량",
   lifeItem: "생활 소재 특별",
   pointShift: "곱의 변화 비교",
+  bank: "문제은행 특별",
 };
 
 export const MODE_LABEL: Record<TaskMode, string> = { calc: "계산", specified: "지정량 계량", concept: "비교" };

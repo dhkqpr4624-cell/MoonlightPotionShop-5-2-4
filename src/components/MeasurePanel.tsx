@@ -178,7 +178,8 @@ function ResultView({ order, task, dispatch, locked, index }: { order: Order; ta
       {showSteps ? (
         <div className="explain" data-testid="explanation">
           <strong>계산 과정</strong>
-          <ol>
+          {/* 문제은행 해설은 원문 번호(①②③④)를 그대로 쓰므로 목록 번호를 따로 붙이지 않는다 */}
+          <ol className={task.problem.bankId ? "explain-bank" : undefined}>
             {solutionSteps(order, task).map((line, i) => <li key={i}>{line}</li>)}
           </ol>
           {wrong && !concept && (

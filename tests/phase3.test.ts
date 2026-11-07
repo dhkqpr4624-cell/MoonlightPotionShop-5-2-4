@@ -40,7 +40,8 @@ test("3B 오답: 입력값 유지·확정, 그 양으로 투입, 해설은 실�
   const steps = solutionSteps(o, t).join(" ");
   if (t.mode === "calc") {
     assert.match(steps, new RegExp(`${t.problem.a.replace(".", "\\.")} × ${t.problem.b}`), "식");
-    assert.match(steps, /자연수로 계산하면/, "자연수 계산");
+    // 문제은행 과제는 그 문항의 해설(소수점을 떼고 계산 → 자릿수), 생성기 과제는 기존 해설
+    assert.match(steps, t.problem.bankId ? /소수점을 생각하지 않고/ : /자연수로 계산하면/, "자연수 계산");
     assert.match(steps, new RegExp(`${t.problem.answer.replace(".", "\\.")}`), "결과");
   }
   // 다시 정답을 넣어도 바뀌지 않음 (재입력 없음)
@@ -177,7 +178,7 @@ test("3C 하루 구성: 특별 주문 제한·첫 손님 일반·일반 주문 2
     assert.ok(kinds.filter((k) => k === "lifeItem").length <= 1, `day ${d + 1} life`);
     assert.ok(kinds.filter((k) => k === "pointShift").length <= 1, `day ${d + 1} shift`);
     assert.ok(os.filter((o) => o.reviewCandidateId).length <= 1, `day ${d + 1} review`);
-    const normal = (k: string) => k === "multiBottle" || k === "customMultiplier" || k === "customAmount";
+    const normal = (k: string) => k === "multiBottle" || k === "customMultiplier" || k === "customAmount" || k === "bank";
     assert.ok(normal(kinds[0]), `day ${d + 1} 첫 손님`);
     assert.ok(kinds.filter(normal).length >= 2);
     // 소개된 유형 안에서만

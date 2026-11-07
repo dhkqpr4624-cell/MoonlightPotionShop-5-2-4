@@ -8,6 +8,7 @@ import { getLifeItem } from "../data/lifeItems.ts";
 import { compare, normalize, parseDecimal } from "../lib/decimal.ts";
 import { copula, josa } from "../lib/josa.ts";
 import { diagnoseWrong } from "./feedback.ts";
+import { BANK_BY_ID } from "./questionBank.ts";
 import type { IngredientTask, Order, ShiftChoice } from "./types.ts";
 
 const ONE = parseDecimal("1");
@@ -22,7 +23,7 @@ export const CHOICE_LABEL: Record<ShiftChoice, string> = { x10: "10배", same: "
 function conditionLine(order: Order, task: IngredientTask): string {
   const ing = getIngredient(task.ingredientId);
   const p = task.problem;
-  const given = order.kind === "customAmount";
+  const given = order.kind === "customAmount" || (order.kind === "bank" && !!p.bankId);
   switch (p.bMeaning) {
     case "bottles":
       return given
@@ -44,10 +45,18 @@ function conditionLine(order: Order, task: IngredientTask): string {
   }
 }
 
+/** 문제은행 해설을 ①②③④ 단계별 줄로 */
+export function splitBankExplanation(text: string): string[] {
+  return text.split(/(?=[①②③④⑤⑥⑦⑧⑨])/).map((x) => x.trim()).filter(Boolean);
+}
+
 /** 실제 숫자를 쓴 계산 과정 (정답 포함) */
 export function solutionSteps(order: Order, task: IngredientTask): string[] {
   const p = task.problem;
   const ing = getIngredient(task.ingredientId);
+  // 문제은행 과제: 그 문항의 해설 (문제 ID로 연결)
+  const bq = p.bankId ? BANK_BY_ID.get(p.bankId) : undefined;
+  if (bq && task.mode === "calc") return splitBankExplanation(bq.explanation);
 
   if (task.mode === "specified") {
     return [
@@ -137,6 +146,8 @@ export function orderHints(order: Order): OrderHint[] {
     } else if (t.mode === "concept" && t.concept) {
       const c = t.concept;
       text = `지난번 식 ${c.refA} × ${josa(c.refB, "과/와")} 이번 식 ${c.newA} × ${josa(c.newB, "을/를")} 비교해 보세요. 곱하는 두 수가 각각 몇 배가 되었는지 살펴보세요.`;
+    } else if (p.bankId && BANK_BY_ID.get(p.bankId)) {
+      text = BANK_BY_ID.get(p.bankId)!.hint;
     } else {
       text = `${p.a} × ${josa(p.b, "을/를")} 계산해 보세요.`;
     }

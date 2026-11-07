@@ -19,7 +19,7 @@ import { getRecipe, RECIPES, type Recipe } from "../data/recipes.ts";
 import { WORKBENCH_SCENE as WB } from "../data/shopArt.ts";
 import { assetUrl } from "../lib/assets.ts";
 import { orderHints } from "../game/explain.ts";
-import { isRecipeAvailable, nextGoal, requiredIngredients } from "../game/unlocks.ts";
+import { isRecipeAvailable, requiredIngredients } from "../game/unlocks.ts";
 import type { GameState, Order } from "../game/types.ts";
 import { Icon } from "./Icon.tsx";
 import { IngredientArt, PotionBottle } from "./art/PotionArt.tsx";
@@ -151,15 +151,9 @@ function RecipeCard({ recipe, state }: { recipe: Recipe; state: GameState }) {
 
 /** 오른쪽 면: 레시피 고르기 */
 function RecipeList({ list, selected, onSelect, state }: { list: Recipe[]; selected: string; onSelect: (id: string) => void; state: GameState }) {
-  const goal = nextGoal(state.unlockedIngredients);
   return (
     <div className="rb-list-wrap">
       <h3 className="rb-sub">레시피 고르기</h3>
-      {goal && (
-        <p className="rb-goal" data-testid="next-goal">
-          다음 목표: <strong>{getRecipe(goal.recipeId).name}</strong> — {goal.missing.map((id) => getIngredient(id).name).join(", ")} 해금
-        </p>
-      )}
       <ul className="rb-list" role="list">
         {list.map((r) => {
           const usable = r.legacy || isRecipeAvailable(r, state.unlockedIngredients);

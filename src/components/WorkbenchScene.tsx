@@ -24,7 +24,7 @@ import {
   type CSSProperties, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type RefObject,
 } from "react";
 import { getIngredient, type Ingredient } from "../data/ingredients.ts";
-import { nextGoal, shopIngredients } from "../game/unlocks.ts";
+import { shopIngredients } from "../game/unlocks.ts";
 import { josa } from "../lib/josa.ts";
 import { getRecipe } from "../data/recipes.ts";
 import { WORKBENCH_SCENE as WB } from "../data/shopArt.ts";
@@ -41,7 +41,8 @@ import { MeasurePanel } from "./MeasurePanel.tsx";
 import { BookPopup, type BookKind } from "./BookPopup.tsx";
 import { IngredientArt, PotionBottle } from "./art/PotionArt.tsx";
 import { IngredientPile } from "./art/IngredientPile.tsx";
-import { HudCenter, HudLeft, HudRight, type HudProps } from "./SceneHud.tsx";
+import { HudLeft, HudMoney, HudSound, type HudProps } from "./SceneHud.tsx";
+import { clientToLocal } from "./Stage.tsx";
 
 export const POUR_MS = 1200;
 export const BOTTLE_MS = 1600;
@@ -119,12 +120,14 @@ interface DragInfo {
   active: boolean;
 }
 
-export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = false }: {
+export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = false, tutorial = false }: {
   state: GameState; order: Order; dispatch: Dispatch<Action>;
-  /** 상태 UI(처음 화면·일차·음소거·소지금·상점). 제작대에서는 머리줄 안에 놓아 위쪽 서랍을 가리지 않는다 */
+  /** 상시 UI는 처음 화면·소리·소지금·창구 보기 넷뿐 (제작대 아래쪽 빈 나무판 위, 서랍을 가리지 않음) */
   hud?: HudProps;
   /** 상점 창·미리보기가 열려 있음: 뒤쪽 조작·자동 젓기를 멈춘다 */
   overlayOpen?: boolean;
+  /** 첫 주문 튜토리얼 중: 주문서·레시피북을 닫으면 확인한 것으로 기록 */
+  tutorial?: boolean;
 }) {
   const recipe = getRecipe(order.recipeId);
   const benchTheme = state.shop.equipped.bench;
@@ -138,14 +141,16 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
   const activeTask = active !== null ? order.tasks[active] : null;
 
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const L = useBenchLayout(stageRef);
   /** 캔버스 좌표 상자 → 화면(장면 상자 기준) 스타일 */
   const rect = (b: Box): CSSProperties => ({ left: L.left + b.x * L.s, top: L.top + b.y * L.s, width: b.width * L.s, height: b.height * L.s });
-  /** 화면 좌표(client) → 캔버스 좌표 */
+  /** 화면 좌표(client) → 캔버스 좌표. 무대 전체 배율(transform)과 여백을 거꾸로 바꾼 뒤 장면 배율로 나눈다 */
   const toCanvas = (clientX: number, clientY: number): Point | null => {
-    const r = stageRef.current?.getBoundingClientRect();
-    if (!r || L.s <= 0) return null;
-    return { x: (clientX - r.left - L.left) / L.s, y: (clientY - r.top - L.top) / L.s };
+    const el = stageRef.current;
+    if (!el || L.s <= 0) return null;
+    const p = clientToLocal(el, clientX, clientY);
+    return { x: (p.x - L.left) / L.s, y: (p.y - L.top) / L.s };
   };
   const inRim = (p: Point | null) => !!p && ((p.x - RIM.cx) / RIM.rx) ** 2 + ((p.y - RIM.cy) / RIM.ry) ** 2 <= 1;
 
@@ -154,7 +159,6 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
   const bookBtn = useRef<HTMLButtonElement | null>(null);
   const clipBtn = useRef<HTMLButtonElement | null>(null);
   /** 책 팝업이나 '새 레시피 해금' 안내가 열려 있으면 뒤쪽 조작을 막는다 */
-  const goalInfo = nextGoal(state.unlockedIngredients);
   const popupOpen = popup !== null || state.recipeNotices.length > 0 || overlayOpen;
 
   /* ---------------- 연출 (화면 효과일 뿐, 진행은 저장 상태가 결정) ---------------- */
@@ -223,8 +227,12 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
     [dispatch, order.id],
   );
 
+  /** 끄는 재료 그림: 화면 좌표를 제작대 장면 안의 좌표로 바꿔 놓는다 (무대 배율이 있어도 손가락 아래) */
   const moveGhost = (x: number, y: number) => {
-    if (ghostRef.current) ghostRef.current.style.transform = `translate(${x}px, ${y}px)`;
+    const root = rootRef.current;
+    if (!ghostRef.current || !root) return;
+    const p = clientToLocal(root, x, y);
+    ghostRef.current.style.transform = `translate(${p.x}px, ${p.y}px)`;
   };
   const endDrag = useCallback(() => {
     dragRef.current = null;
@@ -471,6 +479,7 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
   const closePopup = () => {
     const kind = popup;
     setPopup(null);
+    if (tutorial && kind) dispatch({ type: "TUTORIAL_MARK", what: kind === "order" ? "order" : "recipe" });
     window.setTimeout(() => (kind === "recipe" ? bookBtn.current : clipBtn.current)?.focus(), 0);
   };
 
@@ -536,14 +545,6 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
   const mixed = doneIngs.reduce((c, ing, i) => blend(c, ing.color, i === 0 ? 0.7 : 0.5), baseColor);
   const liquidColor = !brewing || stirred ? recipe.look.liquid : stir > 0 ? blend(mixed, recipe.look.liquid, stir) : mixed;
   const step = !brewing ? "bottled" : active !== null ? "measure" : !allDone ? "place" : !stirred ? "stir" : "bottle";
-  const pickedIng = picked !== null ? getIngredient(order.tasks[picked].ingredientId) : null;
-  const instruction: Record<string, string> = {
-    place: pickedIng ? `${pickedIng.name}를 집었어요. 항아리를 눌러 넣어요.` : "서랍의 재료를 눌러 집고 항아리를 누르거나, 재료를 항아리로 끌어다 놓아요.",
-    measure: "계량 패널에서 양을 정해요. 레시피북과 주문서를 다시 볼 수 있어요.",
-    stir: autoOn ? "마녀의 자동 솥이 젓고 있어요. 막대를 잡고 직접 저어도 돼요." : "막대를 잡고 움직여 포션을 저어 주세요.",
-    bottle: "다 저었어요! 병에 담아요.",
-    bottled: bottling ? "병에 담는 중…" : "포션 완성! 창구로 가져가요.",
-  };
   const pourIng = pourAnim ? getIngredient(pourAnim.ingredientId) : null;
   const showStick = brewing && allDone;
   const targeting = canPlace && (picked !== null || !!drag?.active);
@@ -553,7 +554,7 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
     : (() => {
         const left0 = L.left + 975 * L.s;
         const width = Math.max(320, 500 * L.s);
-        return { left: Math.max(8, Math.min(left0, L.left + 1475 * L.s - width)), width, top: L.top + 14 * L.s, height: Math.max(260, 912 * L.s) };
+        return { left: Math.max(8, Math.min(left0, L.left + 1475 * L.s - width)), width, top: L.top + 14 * L.s, height: Math.max(260, 858 * L.s) };
       })();
 
   const actions = (
@@ -591,36 +592,7 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
   );
 
   return (
-    <div className={`bench bench--top ${active !== null ? "measuring" : ""}`}>
-      <header className="bench-bar" aria-label="주문 요약">
-        {hud && <HudLeft onHome={hud.onHome} homeDisabled={hud.homeDisabled || busy || active !== null} />}
-        <div className="bench-order">
-          <PotionBottle look={recipe.look} size={28} />
-          <span data-testid="order-title">{order.script.memo[0].replace("포션: ", "")}</span>
-          {order.rules === 2 && <span className="badge badge-plain">이전 규칙</span>}
-          {recipe.legacy && <span className="badge badge-plain">이전 레시피</span>}
-        </div>
-        <p className="bench-hint" role="status" data-testid="instruction">
-          {step === "stir" && <Icon name="hand" size={18} />} {instruction[step]}
-        </p>
-        <ol className="steps" aria-label="제조 단계">
-          {order.tasks.map((t) => (
-            <StepChip key={t.problemId} done={t.status === "done"} label={getIngredient(t.ingredientId).name} />
-          ))}
-          <StepChip done={stirred} label="젓기" />
-          <StepChip done={!brewing} label="병에 담기" />
-        </ol>
-        <button type="button" className="btn btn-quiet" onClick={() => dispatch({ type: "GO_COUNTER" })} disabled={busy || active !== null || popupOpen} data-testid="to-counter-peek">
-          창구 보기
-        </button>
-        {hud && (
-          <div className="bench-hud">
-            <HudCenter dayLabel={hud.dayLabel} />
-            <HudRight money={hud.money} sound={hud.sound} onSound={hud.onSound} onShop={hud.onShop}
-              shopDisabled={hud.shopDisabled || busy || active !== null || !!drag?.active || holding || popup !== null} />
-          </div>
-        )}
-      </header>
+    <div className={`bench bench--top ${active !== null ? "measuring" : ""}`} ref={rootRef} data-testid="bench" data-order={order.id}>
 
       <div className={`bench-stage ${L.stacked ? "is-stacked" : ""}`} ref={stageRef} style={{ ["--s" as string]: String(L.s) } as CSSProperties} data-testid="bench-stage">
         <img className="bench-table" src={assetUrl(decorOf("bench", benchTheme).image)} alt="" draggable={false} style={rect(sceneBox)} data-testid="bench-table" />
@@ -687,11 +659,9 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
           const owned = ing.legacy || state.unlockedIngredients.includes(ing.id);
           if (!owned) {
             const short = state.money < ing.unlockCost;
-            // 다음 목표(필요 재료가 가장 적게 남은 레시피)의 재료 칸은 금빛 테두리로 알려 준다
-            const goal = goalInfo && goalInfo.missing.includes(ing.id);
             // 칸 안쪽 전체가 잠금 해제 버튼(터치하기 쉽게). 글자 크기는 장면 배율(--s)을 따른다
             return (
-              <div key={ing.id} className={`drawer-lock ${goal ? "is-goal" : ""}`} style={{ ...rect(d), ["--s" as string]: String(L.s) } as CSSProperties} data-testid={`lock-${ing.id}`} data-locked="true" data-goal={goal ? "true" : "false"}>
+              <div key={ing.id} className="drawer-lock" style={{ ...rect(d), ["--s" as string]: String(L.s) } as CSSProperties} data-testid={`lock-${ing.id}`} data-locked="true">
                 <span className="lock-shade" aria-hidden="true" />
                 <button
                   type="button"
@@ -703,7 +673,6 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
                   data-short={short ? "true" : "false"}
                   data-sfx="none"
                 >
-                  {goal && <span className="lock-goal" data-testid={`goal-${ing.id}`}>다음 목표</span>}
                   <span className="lock-price" data-testid={`price-${ing.id}`}>
                     <Icon name="lock" size={Math.max(11, 22 * L.s)} /> <Icon name="coin" size={Math.max(11, 22 * L.s)} /> {ing.unlockCost}
                   </span>
@@ -779,7 +748,7 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
           onKeyDown={onZoneKeyDown}
           tabIndex={stirMode ? 0 : -1}
           role={stirMode ? "slider" : undefined}
-          aria-label={stirMode ? "젓는 막대 (좌우 화살표로도 저을 수 있어요)" : "항아리"}
+          aria-label={stirMode ? "막대를 잡고 움직여 포션을 저어 주세요. (좌우 화살표로도 저을 수 있어요)" : "항아리"}
           aria-valuemin={stirMode ? 0 : undefined}
           aria-valuemax={stirMode ? 100 : undefined}
           aria-valuenow={stirMode ? order.stirProgress : undefined}
@@ -845,8 +814,24 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
 
         {!L.stacked && (
           <>
-            <div className="bench-meter" style={rect({ x: 470, y: 864, width: 360, height: 44 })}>{meter}</div>
+            <div className="bench-meter" style={rect({ x: 470, y: 878, width: 360, height: 50 })}>{meter}</div>
             <div className="bench-actions" style={rect(WB.slab)}>{actions}</div>
+          </>
+        )}
+
+        {/* 상시 UI 넷: 처음 화면·소리 (왼쪽 아래) / 소지금·창구 보기 (오른쪽 아래). 아래쪽 빈 나무판 위라 서랍·책·주문서를 가리지 않는다 */}
+        {hud && (
+          <>
+            <div className="bench-hud bench-hud-left" style={rect({ x: 22, y: 884, width: 420, height: 52 })} data-testid="bench-hud-left">
+              <HudLeft onHome={hud.onHome} homeDisabled={hud.homeDisabled || busy || active !== null} />
+              <HudSound sound={hud.sound} onSound={hud.onSound} />
+            </div>
+            <div className="bench-hud bench-hud-right" style={rect({ x: 1150, y: 884, width: 500, height: 52 })} data-testid="bench-hud-right">
+              <HudMoney money={hud.money} />
+              <button type="button" className="hud-btn hud-peek" onClick={() => dispatch({ type: "GO_COUNTER" })} disabled={busy || active !== null || popupOpen} data-testid="to-counter-peek">
+                <Icon name="back" size={18} /> 창구 보기
+              </button>
+            </div>
           </>
         )}
 
@@ -868,7 +853,7 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
       </div>
 
       {drag?.active && (
-        <div className="drag-ghost" ref={ghostRef} aria-hidden="true">
+        <div className="drag-ghost" ref={ghostRef} aria-hidden="true" data-testid="drag-ghost">
           <span className="drag-ghost-inner">
             <IngredientArt ingredient={getIngredient(drag.ingredientId)} size={84} />
           </span>
@@ -932,14 +917,6 @@ function BookButton({
   );
 }
 
-function StepChip({ done, label }: { done: boolean; label: string }) {
-  return (
-    <li className={done ? "is-done" : ""}>
-      {done ? <Icon name="check" size={14} /> : <span className="dot" aria-hidden="true" />} {label}
-      <span className="sr-only">{done ? " 완료" : " 아직"}</span>
-    </li>
-  );
-}
 
 function StepGuide({ order, step }: { order: Order; step: string }) {
   const items = [

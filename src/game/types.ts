@@ -14,8 +14,22 @@ export type { Quality } from "../data/customers.ts";
  *                    (1병당 양 × 병 수, 또는 손님이 알려 준 기준 양 × 배수)
  *  lifeItem:         생활 소재 특별 주문
  *  pointShift:       ⑦ 곱의 변화 비교
+ *  bank:             문제은행 손님 지정량 특별 주문 (data/questionBank.ts의 한 문항 = 재료 하나의 계산 과제,
+ *                    나머지 재료는 레시피 정상 조건으로 계량) — 저장 버전 7부터
  */
-export type OrderKind = "multiBottle" | "customMultiplier" | "customAmount" | "lifeItem" | "pointShift";
+export type OrderKind = "multiBottle" | "customMultiplier" | "customAmount" | "lifeItem" | "pointShift" | "bank";
+
+/** 문제은행 주문 정보 (문제 ID로 원문·힌트·해설과 연결) */
+export interface BankOrderInfo {
+  /** 문제은행 ID (예: MP-001) */
+  questionId: string;
+  difficulty: "하" | "중" | "상";
+  /** perBottle: 지정 재료 1병당 양 × 병 수, 다른 재료도 레시피 1병당 양 × 병 수
+   *  base:      지정 재료 기준량 × 배수(1병), 다른 재료는 레시피 1병 기본량 */
+  form: "perBottle" | "base";
+  /** 계산할 재료 (과제 목록에서 bankId가 붙은 과제) */
+  ingredientId: string;
+}
 
 /**
  * 규칙 버전
@@ -49,6 +63,8 @@ export interface Problem {
   learningType: LearningTypeId | null;
   unit: Unit;
   bMeaning: BMeaning;
+  /** 문제은행 과제면 문제 ID (힌트·해설을 그 문항에서 읽는다) */
+  bankId?: string;
 }
 
 export type ShiftChoice = "x10" | "same" | "d10";
@@ -161,6 +177,8 @@ export interface Order {
   /** 손님 지정량 주문(customAmount)의 조건. 그 밖의 주문에는 없다 */
   given?: GivenAmount | null;
   life: LifeData | null;
+  /** 문제은행 주문(bank)의 정보. 그 밖의 주문에는 없다 */
+  bank?: BankOrderInfo | null;
   tasks: IngredientTask[];
   autoAdditions: AutoAddition[];
   status: OrderStatus;
@@ -340,8 +358,23 @@ export interface ShopState {
   toggles: { glasses: boolean; autoCauldron: boolean };
 }
 
+/**
+ * 첫 주문 튜토리얼 (저장 버전 7부터). 새로 시작한 게임에만 생기고, 이전 저장에는 null(강제로 시작하지 않음).
+ * 현재 단계는 주문·화면 상태에서 계산하고(game/tutorial.ts), 여기에는 상태만으로 알 수 없는 것만 저장한다.
+ */
+export interface TutorialState {
+  /** 튜토리얼 주문 ID (새 게임 첫 손님) */
+  orderId: string;
+  /** 주문서 팝업을 열었다가 닫음 */
+  orderViewed: boolean;
+  /** 레시피북 팝업을 열었다가 닫음 */
+  recipeViewed: boolean;
+  /** active: 진행 중 / done: 전달까지 마침 / skipped: 건너뜀 */
+  status: "active" | "done" | "skipped";
+}
+
 export interface GameState {
-  saveVersion: 6;
+  saveVersion: 7;
   scene: Scene;
   money: number;
   nextOrderNumber: number;
@@ -369,4 +402,6 @@ export interface GameState {
   /** 새로 해금되어 다음 영업에 처음 주문으로 넣을 레시피 ID. 주문에 넣으면 빠진다 (저장 버전 5부터) */
   featuredRecipes: string[];
   shop: ShopState;
+  /** 첫 주문 튜토리얼. 이전 저장·튜토리얼 없이 시작한 게임은 null */
+  tutorial: TutorialState | null;
 }

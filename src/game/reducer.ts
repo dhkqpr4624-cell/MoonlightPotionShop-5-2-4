@@ -38,7 +38,12 @@ export const MAX_HINT_LEVEL = 3;
 export const STIR_MAX_STEP = 25;
 
 export type Action =
-  | { type: "START"; seed: number }
+  /** tutorial: 새 게임 첫 주문 튜토리얼로 시작 (첫 영업에만 의미가 있다) */
+  | { type: "START"; seed: number; tutorial?: boolean }
+  /** 튜토리얼: 주문서·레시피북을 열었다가 닫음 */
+  | { type: "TUTORIAL_MARK"; what: "order" | "recipe" }
+  /** 튜토리얼 건너뛰기 (주문은 그대로, 안내만 끝) */
+  | { type: "TUTORIAL_SKIP" }
   | { type: "GO_TITLE" }
   | { type: "ASK_AGAIN"; orderId: string }
   | { type: "ACK_INTRO"; dayNumber: number }
@@ -73,7 +78,7 @@ export type Action =
 
 export function createInitialState(): GameState {
   return {
-    saveVersion: 6,
+    saveVersion: 7,
     scene: "title",
     money: 0,
     nextOrderNumber: 1,
@@ -94,8 +99,12 @@ export function createInitialState(): GameState {
     recipeNotices: [],
     shop: defaultShop(),
     featuredRecipes: [],
+    tutorial: null,
   };
 }
+
+/** 튜토리얼 첫 주문: 여우의 기력 포션 2병 (기력초 0.6g × 2) */
+export const TUTORIAL_ORDER = { key: "multiBottle:energy:2", customerId: "fox" } as const;
 
 export function currentOrder(state: GameState): Order | null {
   if (!state.day) return null;
@@ -119,11 +128,12 @@ export { isLearningTask };
 const RESET_WORK = { activeTask: null, draftAnswer: "", feedback: null, pour: null } as const;
 
 /** 새 영업일 준비 (주문 5건 생성 → 저장되므로 새로고침해도 같은 주문) */
-function openDay(state: GameState, dayNumber: number, introStage: number, newTypes: DayState["newTypes"], seed: number): GameState {
+function openDay(state: GameState, dayNumber: number, introStage: number, newTypes: DayState["newTypes"], seed: number, tutorial = false): GameState {
   const rng = createRng(seed);
   const made = planDay({
     dayNumber, introStage, newTypes, decks: state.decks, nextOrderNumber: state.nextOrderNumber, review: state.review, rng,
-    unlocked: state.unlockedIngredients, featureRecipes: state.featuredRecipes,
+    unlocked: state.unlockedIngredients, featureRecipes: state.featuredRecipes, useBank: true,
+    firstOrder: tutorial ? TUTORIAL_ORDER : undefined,
   });
   // 주문에 넣은 레시피와 더 이상 쓸 수 없는 레시피는 '첫 주문' 목록에서 뺀다
   const usable = new Set(availableRecipes(state.unlockedIngredients).map((r) => r.id));
@@ -240,7 +250,12 @@ export function reducer(state: GameState, action: Action): GameState {
 
   switch (action.type) {
     case "START": {
-      if (!day) return openDay(state, 1, 0, INTRO_STAGES[0], action.seed);
+      if (!day) {
+        const opened = openDay(state, 1, 0, INTRO_STAGES[0], action.seed, !!action.tutorial);
+        if (!action.tutorial) return opened;
+        const first = opened.day!.orders[0];
+        return { ...opened, tutorial: { orderId: first.id, orderViewed: false, recipeViewed: false, status: "active" } };
+      }
       if (day.status === "closed") return { ...state, scene: "closing" };
       if (!order) return state;
       return { ...state, scene: order.status === "brewing" ? "workbench" : "counter" };
@@ -436,8 +451,10 @@ export function reducer(state: GameState, action: Action): GameState {
       if (order.id !== action.orderId || order.status !== "bottled" || order.reward === null) return state;
       if (state.paidOrderIds.includes(order.id)) return state;
       const paid = withOrder(state, { ...order, status: "paid" });
+      const tu = state.tutorial;
       return {
         ...paid,
+        tutorial: tu && tu.status === "active" && tu.orderId === order.id ? { ...tu, status: "done" } : tu,
         day: { ...(paid.day as DayState), moneyEarned: day.moneyEarned + order.reward },
         money: state.money + order.reward,
         scene: "counter",
@@ -509,6 +526,19 @@ export function reducer(state: GameState, action: Action): GameState {
     case "SET_GADGET": {
       const shop = trySetGadget(state.shop, action.id, action.on);
       return shop ? { ...state, shop } : state;
+    }
+
+    case "TUTORIAL_MARK": {
+      const tu = state.tutorial;
+      if (!tu || tu.status !== "active") return state;
+      if (action.what === "order" ? tu.orderViewed : tu.recipeViewed) return state;
+      return { ...state, tutorial: action.what === "order" ? { ...tu, orderViewed: true } : { ...tu, recipeViewed: true } };
+    }
+
+    case "TUTORIAL_SKIP": {
+      const tu = state.tutorial;
+      if (!tu || tu.status !== "active") return state;
+      return { ...state, tutorial: { ...tu, status: "skipped" } };
     }
 
     case "ACK_RECIPE_NOTICE": {

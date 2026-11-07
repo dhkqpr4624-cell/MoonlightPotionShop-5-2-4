@@ -37,24 +37,36 @@ export function HudCenter({ dayLabel }: Pick<HudProps, "dayLabel">) {
   );
 }
 
+export function HudSound({ sound, onSound }: Pick<HudProps, "sound" | "onSound">) {
+  return (
+    <button
+      type="button"
+      className="hud-btn hud-mute"
+      aria-pressed={!sound.enabled}
+      aria-label={sound.enabled ? "효과음 끄기 (음소거)" : "효과음 켜기"}
+      onClick={() => onSound({ ...sound, enabled: !sound.enabled })}
+      data-testid="sound-button"
+      data-sfx="none"
+    >
+      <Icon name={sound.enabled ? "sound" : "mute"} size={18} />
+    </button>
+  );
+}
+
+export function HudMoney({ money }: Pick<HudProps, "money">) {
+  return (
+    <div className="hud-chip hud-money" data-testid="money" aria-label={`달빛 동전 ${money}개`}>
+      <Icon name="coin" size={20} />
+      <span data-testid="money-value">{money}</span>
+    </div>
+  );
+}
+
 export function HudRight({ money, sound, onSound, onShop, shopDisabled }: Pick<HudProps, "money" | "sound" | "onSound" | "onShop" | "shopDisabled">) {
   return (
     <div className="hud-right">
-      <button
-        type="button"
-        className="hud-btn hud-mute"
-        aria-pressed={!sound.enabled}
-        aria-label={sound.enabled ? "효과음 끄기 (음소거)" : "효과음 켜기"}
-        onClick={() => onSound({ ...sound, enabled: !sound.enabled })}
-        data-testid="sound-button"
-        data-sfx="none"
-      >
-        <Icon name={sound.enabled ? "sound" : "mute"} size={18} />
-      </button>
-      <div className="hud-chip hud-money" data-testid="money" aria-label={`달빛 동전 ${money}개`}>
-        <Icon name="coin" size={20} />
-        <span data-testid="money-value">{money}</span>
-      </div>
+      <HudSound sound={sound} onSound={onSound} />
+      <HudMoney money={money} />
       <button type="button" className="hud-btn hud-shop" onClick={onShop} disabled={shopDisabled} data-testid="open-shop">
         <Icon name="bag" size={18} /> <span className="hud-text">상점</span>
       </button>

@@ -2,7 +2,7 @@
  * 저장·불러오기·검증·마이그레이션 (저장 버전 6).
  *
  * - localStorage 키 하나에 게임 상태 전체(JSON 하나)를 저장한다.
- * - 버전 1 → 2 → 3 → 4 → 5 → 6 순서로 자동으로 옮긴다. 옮기기 전 원본은 백업 키(backup-v○)에 보관.
+ * - 버전 1 → 2 → 3 → 4 → 5 → 6 → 7 순서로 자동으로 옮긴다. 옮기기 전 원본은 백업 키(backup-v○)에 보관.
  * - 손상되었거나 규칙·참조가 맞지 않거나 더 새로운 버전인 저장은 덮어쓰지 않고 오류로 돌려준다.
  */
 import { isAppearanceOf } from "../data/appearances.ts";
@@ -10,12 +10,13 @@ import { CUSTOMERS, fillLine } from "../data/customers.ts";
 import { DIALOGUES } from "../data/dialogues.ts";
 import { classifyProduct, LEARNING_TYPE_IDS, LEARNING_TYPES, MAX_INTRO_STAGE } from "../data/learningTypes.ts";
 import { LIFE_ITEMS } from "../data/lifeItems.ts";
+import { BANK_BY_ID, bankLearningType } from "./questionBank.ts";
 import { RECIPES } from "../data/recipes.ts";
 import { equals, isDecimalString, multiplyStrings, parseDecimal, toDecimalString } from "../lib/decimal.ts";
 import { type DeckState } from "../lib/deck.ts";
 import { migrateV1toV2, validateV2State } from "./legacy/v2save.ts";
 import type * as V2 from "./legacy/v2types.ts";
-import { shiftConcept, SHIFT_VARIANTS } from "./orderFactory.ts";
+import { bankOrderPrice, shiftConcept, SHIFT_VARIANTS } from "./orderFactory.ts";
 import { qualityOf, rewardForOrder } from "./outcome.ts";
 import { freeIngredients, isRecipeAvailable, normalizeUnlocked, shopIngredients } from "./unlocks.ts";
 import { DECOR_SLOTS, GADGETS, SHOP_ITEM_IDS, THEME_IDS, type ThemeId } from "../data/shop.ts";
@@ -33,7 +34,7 @@ import {
 
 export const SAVE_KEY = "moonlight-potion-shop/save";
 export const BACKUP_KEY_PREFIX = "moonlight-potion-shop/backup-";
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -60,7 +61,7 @@ const norm = (s: string) => toDecimalString(parseDecimal(s));
 
 const SCENES = ["title", "counter", "workbench", "closing"];
 const ORDER_STATUSES = ["queued", "arrived", "brewing", "bottled", "paid"];
-const KINDS = ["multiBottle", "customMultiplier", "customAmount", "lifeItem", "pointShift"];
+const KINDS = ["multiBottle", "customMultiplier", "customAmount", "lifeItem", "pointShift", "bank"];
 const MODES = ["calc", "specified", "concept"];
 const CHOICES = ["x10", "same", "d10"];
 const QUALITIES = ["great", "good", "okay", "poor"];
@@ -91,9 +92,22 @@ function validateTask(t: unknown, o: Obj, i: number, w: string): string[] {
 
   // 문제 내용이 주문 조건과 맞는지 (레시피 기본량·정답 조작 방지)
   const kind = o.kind;
-  if (t.mode === "calc") {
+  const bankInfo = kind === "bank" && isObject(o.bank) ? (o.bank as Obj) : null;
+  if (p.bankId !== undefined && (kind !== "bank" || t.mode !== "calc" || !isStr(p.bankId))) e.push(`${w}: 문제은행 정보가 필요 없는 과제입니다.`);
+  if (t.mode === "calc" && kind === "bank" && p.bankId !== undefined) {
+    // 문제은행 과제: 원문 인수·유형과 같아야 한다 (정답은 아래에서 다시 계산)
+    const q = BANK_BY_ID.get(p.bankId as string);
+    if (!q || !bankInfo || bankInfo.questionId !== q.id || q.ingredientId !== t.ingredientId || p.a !== q.a || p.b !== q.b ||
+      p.learningType !== bankLearningType(q) || p.bMeaning !== (bankInfo.form === "perBottle" ? "bottles" : "multiplier")) {
+      e.push(`${w}: 문제은행 문항과 문제가 다릅니다.`);
+    }
+    if (p.answer !== multiplyStrings(p.a as string, p.b as string)) e.push(`${w}: 정답이 계산과 맞지 않습니다.`);
+  } else if (t.mode === "calc") {
     if (p.answer !== multiplyStrings(p.a as string, p.b as string)) e.push(`${w}: 정답이 계산과 맞지 않습니다.`);
     if (p.learningType !== classifyProduct(p.a as string, p.b as string)) e.push(`${w}: 학습 유형이 문제와 맞지 않습니다.`);
+    if (kind === "bank" && (!bankInfo || bankInfo.form !== "perBottle" || p.a !== ad.amount || p.b !== String(o.bottles))) {
+      e.push(`${w}: 문제은행 주문의 다른 재료가 레시피 1병당 양 × 병 수가 아닙니다.`);
+    }
     if (kind === "multiBottle" && (p.a !== ad.amount || p.b !== String(o.bottles))) e.push(`${w}: 레시피 기본량·병 수와 문제가 다릅니다.`);
     if (kind === "customMultiplier" && (p.a !== ad.amount || p.b !== o.multiplier)) e.push(`${w}: 레시피 기본량·배수와 문제가 다릅니다.`);
     if (kind === "customAmount") {
@@ -109,6 +123,7 @@ function validateTask(t: unknown, o: Obj, i: number, w: string): string[] {
     if (kind === "pointShift") e.push(`${w}: 비교 주문에는 계산 과제가 없습니다.`);
   } else if (t.mode === "specified") {
     if (kind === "multiBottle" || kind === "customMultiplier" || kind === "customAmount") e.push(`${w}: 레시피 주문에는 지정량 과제가 없습니다.`);
+    if (kind === "bank" && (!bankInfo || bankInfo.form !== "base")) e.push(`${w}: 여러 병 문제은행 주문에는 지정량 과제가 없습니다.`);
     if (p.answer !== norm(ad.amount) || p.learningType !== null) e.push(`${w}: 지정량이 레시피 기본량과 다릅니다.`);
   } else {
     const c = t.concept;
@@ -179,10 +194,23 @@ export function validateOrder(o: unknown, where: string): string[] {
     if (!okShape || recipe.additives.length !== 1 || !classifyProduct(g.amount as string, g.times as string)) e.push(`${where}: 손님 지정량 정보가 올바르지 않습니다.`);
     else if (g.form === "perBottle" && o.bottles !== Number(g.times)) e.push(`${where}: 손님 지정량 주문의 병 수가 맞지 않습니다.`);
   } else if (!(given === undefined || given === null)) e.push(`${where}: 손님 지정량 정보가 필요 없는 주문입니다.`);
-  const perBottle = o.kind === "multiBottle" || (o.kind === "customAmount" && isObject(given) && given.form === "perBottle");
+  const bank = o.bank;
+  if (o.kind === "bank") {
+    const q = isObject(bank) && isStr(bank.questionId) ? BANK_BY_ID.get(bank.questionId) : undefined;
+    const form = q ? (q.mulType === "소수×자연수" ? "perBottle" : "base") : null;
+    if (!q || !isObject(bank) || q.recipeId !== o.recipeId || bank.form !== form || bank.ingredientId !== q.ingredientId || bank.difficulty !== q.difficulty ||
+      (form === "perBottle" && o.bottles !== q.bottles)) {
+      e.push(`${where}: 문제은행 주문 정보가 올바르지 않습니다.`);
+    } else if (!Array.isArray(o.tasks) || (o.tasks as Obj[]).filter((t) => isObject(t) && isObject(t.problem) && t.problem.bankId === q.id).length !== 1) {
+      e.push(`${where}: 문제은행 과제가 하나여야 합니다.`);
+    }
+  } else if (!(bank === undefined || bank === null)) e.push(`${where}: 문제은행 정보가 필요 없는 주문입니다.`);
+  const perBottle = o.kind === "multiBottle" || (o.kind === "customAmount" && isObject(given) && given.form === "perBottle") ||
+    (o.kind === "bank" && isObject(bank) && bank.form === "perBottle");
   if (perBottle) {
     if (!isInt(o.bottles, 2, 99)) e.push(`${where}: 병 수가 올바르지 않습니다.`);
-    if (o.price !== recipe.pricePerBottle * (o.bottles as number)) e.push(`${where}: 판매가가 레시피 가격과 맞지 않습니다.`);
+    const want = o.kind === "bank" ? bankOrderPrice(recipe, o.bottles as number) : recipe.pricePerBottle * (o.bottles as number);
+    if (o.price !== want) e.push(`${where}: 판매가가 레시피 가격과 맞지 않습니다.`);
   } else {
     if (o.bottles !== 1) e.push(`${where}: 맞춤·특별 주문은 1병입니다.`);
     if (o.price !== recipe.specialPrice) e.push(`${where}: 특별 주문 판매가가 올바르지 않습니다.`);
@@ -305,7 +333,7 @@ function validateLegacyRecord(r: unknown, i: number): string[] {
   return ok ? [] : [`${w}: 필수 값이 빠졌거나 형식이 다릅니다.`];
 }
 
-/** 버전 6 저장 데이터 전체 검증 */
+/** 버전 7 저장 데이터 전체 검증 */
 export function validateState(data: unknown): { ok: true; state: GameState } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   if (!isObject(data)) return { ok: false, errors: ["저장 데이터가 객체 형식이 아닙니다."] };
@@ -401,6 +429,12 @@ export function validateState(data: unknown): { ok: true; state: GameState } | {
     const days = (data.dayHistory as Obj[]).map((h) => (isObject(h) ? h.dayNumber : null));
     if (new Set(days).size !== days.length) errors.push("지난 영업 결과에 같은 일차가 두 번 있습니다.");
   }
+  const tu = data.tutorial;
+  if (tu !== null) {
+    if (!isObject(tu) || !isStr(tu.orderId) || !isBool(tu.orderViewed) || !isBool(tu.recipeViewed) || !["active", "done", "skipped"].includes(tu.status as string)) {
+      errors.push("튜토리얼 정보가 올바르지 않습니다.");
+    }
+  }
   if (errors.length) return { ok: false, errors };
 
   if (data.day === null) {
@@ -473,7 +507,7 @@ function convertV2Order(o: V2.Order): Order {
  * - 유형 소개 단계: 0(①②)에서 시작 → 다음 영업부터 ③④ … 순서대로 소개 (일차가 높아도 건너뛰지 않음)
  */
 /** 버전 3 모양 (해금 목록이 없음) */
-export type V3GameState = Omit<GameState, "saveVersion" | "unlockedIngredients" | "recipeNotices" | "featuredRecipes" | "shop"> & { saveVersion: 3 };
+export type V3GameState = Omit<GameState, "saveVersion" | "unlockedIngredients" | "recipeNotices" | "featuredRecipes" | "shop" | "tutorial"> & { saveVersion: 3 };
 
 export function migrateV2toV3(v2: V2.GameState): V3GameState {
   let day: DayState | null = null;
@@ -544,6 +578,16 @@ export function migrateV5toV6(v5: Obj): Obj {
   return { ...v5, saveVersion: 6, shop: defaultShop() };
 }
 
+/**
+ * 버전 6 → 7 (문제은행·타이틀·튜토리얼 버전)
+ * - 모든 진행(돈·일차·오늘 주문과 문제·제조·입력 중인 답·젓기·지급·학습 기록·해금·상점): 그대로.
+ *   오늘 주문은 그대로 마치고, 문제은행은 다음 영업부터 쓰인다.
+ * - 새 항목 tutorial: null (이미 하던 학생에게 튜토리얼을 강제로 시작하지 않는다)
+ */
+export function migrateV6toV7(v6: Obj): Obj {
+  return { ...v6, saveVersion: 7, tutorial: null };
+}
+
 export function migrateV4toV5(v4: Obj): Obj {
   const list = isStrArray(v4.unlockedIngredients) ? v4.unlockedIngredients : [];
   return { ...v4, saveVersion: 5, unlockedIngredients: normalizeUnlocked(list), recipeNotices: [], featuredRecipes: [] };
@@ -564,18 +608,22 @@ export function interpretSaveData(data: unknown, seed: number): InterpretResult 
     const r = validateState(data);
     return r.ok ? { ok: true, state: r.state, migratedFrom: null } : { ok: false, kind: "invalid", errors: r.errors };
   }
+  if (v === 6) {
+    const r = validateState(migrateV6toV7(data));
+    return r.ok ? { ok: true, state: r.state, migratedFrom: 6 } : { ok: false, kind: "invalid", errors: r.errors };
+  }
   if (v === 5) {
     // 진행 상태(화면 포함)를 그대로 이어 간다
-    const r = validateState(migrateV5toV6(data));
+    const r = validateState(migrateV6toV7(migrateV5toV6(data)));
     return r.ok ? { ok: true, state: r.state, migratedFrom: 5 } : { ok: false, kind: "invalid", errors: r.errors };
   }
   if (v === 4) {
-    const r = validateState(migrateV5toV6(migrateV4toV5(data)));
+    const r = validateState(migrateV6toV7(migrateV5toV6(migrateV4toV5(data))));
     return r.ok ? { ok: true, state: r.state, migratedFrom: 4 } : { ok: false, kind: "invalid", errors: r.errors };
   }
   if (v === 3) {
     // 옮긴 사실을 처음 화면에서 알려 주도록 타이틀에서 시작 (이어하기를 누르면 그 화면으로 돌아간다: 제조 진행은 그대로)
-    const r = validateState({ ...migrateV5toV6(migrateV4toV5(migrateV3toV4(data))), scene: "title" });
+    const r = validateState({ ...migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(data)))), scene: "title" });
     return r.ok ? { ok: true, state: r.state, migratedFrom: 3 } : { ok: false, kind: "invalid", errors: r.errors };
   }
   if (v === 1 || v === 2) {
@@ -589,7 +637,7 @@ export function interpretSaveData(data: unknown, seed: number): InterpretResult 
       if (!r2.ok) return { ok: false, kind: "invalid", errors: r2.errors };
       v2 = r2.state;
     }
-    const migrated = migrateV5toV6(migrateV4toV5(migrateV3toV4({ ...migrateV2toV3(v2), scene: "title" as const } as unknown as Obj)));
+    const migrated = migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4({ ...migrateV2toV3(v2), scene: "title" as const } as unknown as Obj))));
     const r3 = validateState(migrated);
     if (!r3.ok) return { ok: false, kind: "invalid", errors: [`Phase ${v} 저장을 옮기는 중 문제가 생겼습니다.`, ...r3.errors] };
     return { ok: true, state: r3.state, migratedFrom: v };

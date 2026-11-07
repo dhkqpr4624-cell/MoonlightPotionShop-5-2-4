@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { createInitialState, currentOrder, reducer, type Action } from "./game/reducer.ts";
 import { clearSave, loadGame, saveGame } from "./game/save.ts";
 import type { GameState } from "./game/types.ts";
 import { newSeed } from "./lib/rng.ts";
 import { TitleScreen, type LoadIssue } from "./components/TitleScreen.tsx";
+import { Stage } from "./components/Stage.tsx";
+import { TutorialGuide } from "./components/TutorialGuide.tsx";
+import { PortraitNotice } from "./components/PortraitNotice.tsx";
 import { CounterScene } from "./components/CounterScene.tsx";
 import { WorkbenchScene } from "./components/WorkbenchScene.tsx";
 import { ClosingScene } from "./components/ClosingScene.tsx";
@@ -34,7 +37,7 @@ interface Boot {
 function boot(): Boot {
   const r = loadGame(newSeed());
   if (r.kind === "ok") {
-    // 저장된 화면으로 바로 복구 (옮겨 온 Phase 1 저장은 타이틀에서 안내 후 시작)
+    // 저장은 그대로 읽어 두고, 화면은 늘 타이틀부터 ('이어하기'를 누르면 저장된 화면으로)
     return { state: r.state, issue: null, migratedFrom: r.migratedFrom };
   }
   if (r.kind === "error") {
@@ -53,6 +56,8 @@ export default function App() {
   const [loadIssue, setLoadIssue] = useState<LoadIssue | null>(bootInfo.issue);
   const [migratedFrom, setMigratedFrom] = useState<number | null>(bootInfo.migratedFrom);
   const [shutterFx, setShutterFx] = useState<ShutterFx>(null);
+  /** 접속·새로고침하면 타이틀부터. 화면 상태일 뿐 저장(state.scene)은 바꾸지 않는다 */
+  const [showTitle, setShowTitle] = useState(true);
   const [showRecords, setShowRecords] = useState(false);
   const [sound, setSound] = useState<SoundPrefs>(loadSoundSettings);
   const [shopOpen, setShopOpen] = useState(false);
@@ -87,17 +92,34 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 튜토리얼을 끝까지 마친 순간 짧게 축하 (화면 효과일 뿐, 보상 없음)
+  const [tutorialDone, setTutorialDone] = useState(false);
+  const prevTutorial = useRef(state.tutorial?.status);
+  useEffect(() => {
+    if (prevTutorial.current === "active" && state.tutorial?.status === "done") setTutorialDone(true);
+    prevTutorial.current = state.tutorial?.status;
+  }, [state.tutorial?.status]);
+  useEffect(() => {
+    if (!tutorialDone) return;
+    const t = window.setTimeout(() => setTutorialDone(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [tutorialDone]);
+
   // 상태가 바뀔 때마다 저장. 읽지 못한 저장이 있으면 사용자가 고를 때까지 저장하지 않는다.
   useEffect(() => {
     if (!loadIssue) saveGame(state);
   }, [state, loadIssue]);
 
-  const reset = useCallback(() => {
+  /** 새로 시작하기 (타이틀에서 확인을 마친 뒤): 진행·돈·구매·해금·학습 기록을 처음으로, 첫 주문 튜토리얼과 함께 첫 영업 */
+  const newGame = useCallback(() => {
     clearSave();
     setLoadIssue(null);
     setMigratedFrom(null);
-    setShutterFx(null);
     dispatch({ type: "RESET" });
+    dispatch({ type: "START", seed: newSeed(), tutorial: true });
+    setShutterFx("opening");
+    playSfx("shutterOpen");
+    setShowTitle(false);
   }, []);
 
   const applyImport = useCallback((next: GameState) => {
@@ -107,14 +129,18 @@ export default function App() {
     dispatch({ type: "REPLACE_STATE", state: next });
   }, []);
 
-  const start = () => {
-    if (shutterFx) return;
-    if (!state.day) {
-      setShutterFx("opening"); // 첫 영업: 덧문을 열고 첫 손님 등장
-      playSfx("shutterOpen");
-    }
+  /** 이어하기: 저장된 화면(창구·제작대·마감)으로. 이미 한 행동·지급은 다시 하지 않는다 */
+  const continueGame = () => {
+    if (shutterFx || !state.day) return;
     setMigratedFrom(null);
-    dispatch({ type: "START", seed: newSeed() });
+    if (state.scene === "title") dispatch({ type: "START", seed: newSeed() });
+    setShowTitle(false);
+  };
+  const goTitle = () => {
+    setShopOpen(false);
+    setPreview(null);
+    dispatch({ type: "GO_TITLE" });
+    setShowTitle(true);
   };
 
   const closeDay = () => {
@@ -140,7 +166,7 @@ export default function App() {
 
   const day = state.day;
   const order = currentOrder(state);
-  const inGame = state.scene !== "title" && day !== null && order !== null;
+  const inGame = !showTitle && state.scene !== "title" && day !== null && order !== null;
   const overlayOpen = shopOpen || preview !== null;
 
   const hud: HudProps | undefined = inGame
@@ -149,11 +175,7 @@ export default function App() {
         money: state.money,
         sound,
         onSound: changeSound,
-        onHome: () => {
-          setShopOpen(false);
-          setPreview(null);
-          dispatch({ type: "GO_TITLE" });
-        },
+        onHome: goTitle,
         onShop: () => {
           setPreview(null);
           setShopOpen(true);
@@ -163,88 +185,105 @@ export default function App() {
       }
     : undefined;
 
+  const tutorialOn = inGame && state.tutorial?.status === "active" && day.dayNumber === 1;
+
   return (
     <div className="app">
-      <main className="stage">
-        {!inGame && showRecords && <LearningRecords state={state} onBack={() => setShowRecords(false)} />}
-        {!inGame && !showRecords && (
-          <TitleScreen
-            state={state}
-            loadIssue={loadIssue}
-            migratedFrom={migratedFrom}
-            onStart={start}
-            onReset={reset}
-            onImport={applyImport}
-            onRecords={() => setShowRecords(true)}
-            sound={<SoundSettings value={sound} onChange={changeSound} light />}
-          />
-        )}
-        {inGame && state.scene === "counter" && (
-          <CounterScene
-            day={day}
-            order={order}
-            dispatch={dispatch}
-            opening={shutterFx === "opening"}
-            onOpenEnd={endFx}
-            onCloseDay={closeDay}
-            equipped={state.shop.equipped}
-            hud={hud}
-          />
-        )}
-        {inGame && state.scene === "workbench" && <WorkbenchScene state={state} order={order} dispatch={dispatch} hud={hud} overlayOpen={overlayOpen} />}
-        {inGame && state.scene === "closing" && (
-          <ClosingScene
-            state={state}
-            animate={shutterFx === "closing"}
-            onAnimEnd={endFx}
-            onNextDay={nextDay}
-            onTitle={() => dispatch({ type: "GO_TITLE" })}
-            busy={shutterFx !== null}
-            hud={hud}
-          />
-        )}
-        {/* 새 레시피 해금 안내: 확인할 때까지 게임 화면 위에 (저장된 안내라 이어하기 때도 다시 뜬다) */}
-        {inGame && shopOpen && !preview && (
-          <ShopModal
-            state={state}
-            tab={shopTab}
-            onTab={setShopTab}
-            onBuy={(itemId) => dispatch({ type: "BUY_ITEM", itemId })}
-            onEquip={(slot, theme) => dispatch({ type: "EQUIP_DECOR", slot, theme })}
-            onGadget={(id, on) => dispatch({ type: "SET_GADGET", id, on })}
-            onPreview={(slot, theme) => {
-              setShopOpen(false);
-              setPreview({ slot, theme });
-            }}
-            onClose={closeShop}
-          />
-        )}
-        {inGame && preview && (
-          <DecorPreview
-            state={state}
-            slot={preview.slot}
-            theme={preview.theme}
-            onBack={backFromPreview}
-            onEquip={() => {
-              dispatch({ type: "EQUIP_DECOR", slot: preview.slot, theme: preview.theme });
-              backFromPreview();
-            }}
-            onBuy={() => {
-              const item = decorOf(preview.slot, preview.theme);
-              if (state.money < item.price || state.activeTask !== null) return;
-              dispatch({ type: "BUY_ITEM", itemId: item.id });
-              dispatch({ type: "EQUIP_DECOR", slot: preview.slot, theme: preview.theme });
-              backFromPreview();
-            }}
-          />
-        )}
-        {inGame && state.recipeNotices.length > 0 && !shutterFx && !overlayOpen && (
-          <RecipeUnlockNotice
-            recipeId={state.recipeNotices[0]}
-            onConfirm={() => dispatch({ type: "ACK_RECIPE_NOTICE", recipeId: state.recipeNotices[0] })}
-          />
-        )}
-      </main>
+      {!inGame && showRecords ? (
+        <main className="records-page">
+          <LearningRecords state={state} onBack={() => setShowRecords(false)} />
+        </main>
+      ) : (
+        <Stage>
+          {!inGame && (
+            <TitleScreen
+              state={state}
+              loadIssue={loadIssue}
+              migratedFrom={migratedFrom}
+              onContinue={continueGame}
+              onNewGame={newGame}
+              onImport={applyImport}
+              onRecords={() => setShowRecords(true)}
+              sound={<SoundSettings value={sound} onChange={changeSound} light />}
+            />
+          )}
+          {inGame && state.scene === "counter" && (
+            <CounterScene
+              day={day}
+              order={order}
+              dispatch={dispatch}
+              opening={shutterFx === "opening"}
+              onOpenEnd={endFx}
+              onCloseDay={closeDay}
+              equipped={state.shop.equipped}
+              hud={hud}
+            />
+          )}
+          {inGame && state.scene === "workbench" && (
+            <WorkbenchScene state={state} order={order} dispatch={dispatch} hud={hud} overlayOpen={overlayOpen} tutorial={tutorialOn} />
+          )}
+          {inGame && state.scene === "closing" && (
+            <ClosingScene
+              state={state}
+              animate={shutterFx === "closing"}
+              onAnimEnd={endFx}
+              onNextDay={nextDay}
+              onTitle={goTitle}
+              busy={shutterFx !== null}
+              hud={hud}
+            />
+          )}
+          {inGame && shopOpen && !preview && (
+            <ShopModal
+              state={state}
+              tab={shopTab}
+              onTab={setShopTab}
+              onBuy={(itemId) => dispatch({ type: "BUY_ITEM", itemId })}
+              onEquip={(slot, theme) => dispatch({ type: "EQUIP_DECOR", slot, theme })}
+              onGadget={(id, on) => dispatch({ type: "SET_GADGET", id, on })}
+              onPreview={(slot, theme) => {
+                setShopOpen(false);
+                setPreview({ slot, theme });
+              }}
+              onClose={closeShop}
+            />
+          )}
+          {inGame && preview && (
+            <DecorPreview
+              state={state}
+              slot={preview.slot}
+              theme={preview.theme}
+              onBack={backFromPreview}
+              onEquip={() => {
+                dispatch({ type: "EQUIP_DECOR", slot: preview.slot, theme: preview.theme });
+                backFromPreview();
+              }}
+              onBuy={() => {
+                const item = decorOf(preview.slot, preview.theme);
+                if (state.money < item.price || state.activeTask !== null) return;
+                dispatch({ type: "BUY_ITEM", itemId: item.id });
+                dispatch({ type: "EQUIP_DECOR", slot: preview.slot, theme: preview.theme });
+                backFromPreview();
+              }}
+            />
+          )}
+          {/* 새 레시피 해금 안내: 확인할 때까지 게임 화면 위에 (저장된 안내라 이어하기 때도 다시 뜬다) */}
+          {inGame && state.recipeNotices.length > 0 && !shutterFx && !overlayOpen && (
+            <RecipeUnlockNotice
+              recipeId={state.recipeNotices[0]}
+              onConfirm={() => dispatch({ type: "ACK_RECIPE_NOTICE", recipeId: state.recipeNotices[0] })}
+            />
+          )}
+          {/* 첫 주문 튜토리얼 안내 (실제 행동을 해야 다음으로) */}
+          {tutorialOn && !shutterFx && !overlayOpen && (
+            <TutorialGuide state={state} onSkip={() => dispatch({ type: "TUTORIAL_SKIP" })} />
+          )}
+          {inGame && tutorialDone && (
+            <p className="tutorial-done" role="status" data-testid="tutorial-done">첫 주문 완성! 이제 다음 손님도 같은 순서로 만들어 보세요.</p>
+          )}
+        </Stage>
+      )}
+      <PortraitNotice />
     </div>
   );
 }

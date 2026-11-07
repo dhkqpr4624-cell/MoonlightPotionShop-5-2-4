@@ -20,6 +20,7 @@ import {
 import { getLifeItem, LIFE_ITEMS } from "../data/lifeItems.ts";
 import { getRecipe, type Recipe } from "../data/recipes.ts";
 import { availableRecipes, freeIngredients } from "./unlocks.ts";
+import { BANK_DECK, bankFormula, bankLearningType, eligibleBank, getBankQuestion, pickBankQuestion } from "./questionBank.ts";
 import {
   compare, isNaturalNumber, multiplyStrings, parseDecimal, shiftPoint, toDecimalString,
 } from "../lib/decimal.ts";
@@ -166,6 +167,7 @@ export function candidatesFor(kind: OrderKind, intro: LearningTypeId[], recipes:
     case "customAmount": return amountCandidates(intro, recipes);
     case "lifeItem": return lifeCandidates(intro, recipes);
     case "pointShift": return shiftCandidates(intro, recipes);
+    case "bank": return []; // 문제은행 주문은 planDay가 문제은행에서 직접 고른다
   }
 }
 
@@ -345,6 +347,10 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
     };
   }
 
+  if (parts[0] === "bank") {
+    return createBankOrder(parts[1], { id, base, greet, waiting });
+  }
+
   if (parts[0] === "life") {
     const item = getLifeItem(parts[1]);
     const [a, b] = [parts[2], parts[3]];
@@ -425,6 +431,77 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
   throw new Error(`알 수 없는 주문 키: ${key}`);
 }
 
+/** 문제은행 대량 주문의 판매가 상한 병 수 (기존 여러 병 주문의 최대 병 수와 같다) */
+export const BANK_PRICE_BOTTLE_CAP = 9;
+
+/**
+ * 문제은행 주문 판매가.
+ *  여러 병(소수×자연수): 1병 판매가 × 병 수 — 기존 여러 병 주문과 같은 규칙. 단, 문제은행에는 24병 같은 대량 주문이 있어
+ *                       하루 수입·30일 균형이 흔들리지 않게 9병 값까지만 받는다(대량 주문 할인).
+ *  한 병 배수(그 밖):    특별 주문 판매가 (기존 맞춤·손님 지정량 주문과 같다)
+ */
+export function bankOrderPrice(recipe: Recipe, bottles: number | null): number {
+  return bottles === null ? recipe.specialPrice : recipe.pricePerBottle * Math.min(bottles, BANK_PRICE_BOTTLE_CAP);
+}
+
+/**
+ * 문제은행 주문: 문항 하나 = 지정 재료 하나의 계산 과제(원문 인수 그대로).
+ *  perBottle(소수×자연수): 지정 재료는 손님이 정한 1병당 양 × 병 수, 다른 재료는 레시피 1병당 양 × 병 수(계산 과제)
+ *  base(그 밖):          지정 재료는 손님이 알려 준 기준량 × 배수(1병), 다른 재료는 레시피 1병 기본량 그대로(지정량 계량)
+ * 모든 재료를 계량·투입해야 완성된다. 문항 숫자를 레시피에 맞추려고 바꾸지 않는다.
+ */
+function createBankOrder(
+  questionId: string,
+  c: { id: string; base: Omit<Order, "kind" | "recipeId" | "bottles" | "multiplier" | "life" | "tasks" | "autoAdditions" | "price" | "script">; greet: string; waiting: string },
+): Order {
+  const q = getBankQuestion(questionId);
+  const recipe = getRecipe(q.recipeId);
+  const ing = getIngredient(q.ingredientId);
+  const perBottle = q.mulType === "소수×자연수";
+  const n = String(q.bottles);
+  const others = recipe.additives.filter((ad) => ad.ingredientId !== ing.id);
+  const otherNames = others.map((ad) => getIngredient(ad.ingredientId).name).join(", ");
+  const tasks: IngredientTask[] = recipe.additives.map((ad) => {
+    if (ad.ingredientId === ing.id) {
+      return blankTask(c.id, ing.id, "calc", {
+        a: q.a, b: q.b, answer: multiplyStrings(q.a, q.b), learningType: bankLearningType(q), unit: ing.unit,
+        bMeaning: perBottle ? "bottles" : "multiplier", bankId: q.id,
+      });
+    }
+    return perBottle ? calcTask(c.id, ad.ingredientId, ad.amount, n, "bottles") : specifiedTask(c.id, ad.ingredientId, ad.amount);
+  });
+  const otherEasy = !others.length ? ""
+    : perBottle ? fillLine(" {other}는 레시피북의 1병당 양으로 {n}병만큼 넣어 주시오.", { other: otherNames, n })
+    : fillLine(DIALOGUES.hao.otherNote, { other: otherNames });
+  const otherMemo = others.map((ad) => {
+    const x = getIngredient(ad.ingredientId);
+    return perBottle ? `${x.name}(${x.unit}): 기본 조건 — 레시피북의 1병당 양으로 ${n}병만큼` : `${x.name}(${x.unit}): 기본 조건 — 레시피북의 1병 기본량 그대로`;
+  });
+  const script: OrderScript = {
+    greet: c.greet, waiting: c.waiting, reaction: null,
+    original: q.question,
+    easy: q.clarification + otherEasy,
+    memo: [
+      `포션: ${recipe.name} ${perBottle ? `${n}병` : "1병"} (손님 지정량 특별 주문)`,
+      perBottle
+        ? `${ing.name}(${ing.unit}): 특별 조건 — 손님이 정한 1병당 ${q.a}${ing.unit}씩 ${n}병만큼 (레시피보다 우선)`
+        : `${ing.name}(${ing.unit}): 특별 조건 — 손님이 알려 준 기준 ${q.a}${ing.unit}의 ${q.b}배 (레시피보다 우선)`,
+      ...otherMemo,
+      perBottle ? `기본 용액은 1병에 ${recipe.baseSolution.amountMl}mL씩 자동` : `기본 용액은 1병 ${recipe.baseSolution.amountMl}mL 자동`,
+    ],
+  };
+  return {
+    ...c.base, kind: "bank", recipeId: recipe.id, bottles: perBottle ? q.bottles : 1, multiplier: null, life: null,
+    bank: { questionId: q.id, difficulty: q.difficulty, form: perBottle ? "perBottle" : "base", ingredientId: ing.id },
+    tasks,
+    autoAdditions: perBottle
+      ? baseSolution(recipe, n, `1병에 ${recipe.baseSolution.amountMl}mL씩 자동으로 담아요`)
+      : baseSolution(recipe, "1", `1병 기본 용액 ${recipe.baseSolution.amountMl}mL를 자동으로 담아요`),
+    price: bankOrderPrice(recipe, perBottle ? q.bottles : null),
+    script,
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* 하루 주문 계획                                                        */
 /* ------------------------------------------------------------------ */
@@ -445,6 +522,10 @@ export interface DayPlanInput {
    * (현재 소개된 유형으로 낼 수 있는 여러 병·맞춤 배수 주문 중에서).
    */
   featureRecipes?: string[];
+  /** 문제은행을 주 출제원으로 쓴다 (게임 진행은 true. 생성기만 검사하는 테스트는 생략) */
+  useBank?: boolean;
+  /** 첫 손님 주문을 정해 둔다 (새 게임 튜토리얼: 여우의 기력 포션 2병) */
+  firstOrder?: { key: string; customerId: string };
 }
 
 export interface DayPlanResult {
@@ -454,6 +535,8 @@ export interface DayPlanResult {
   reviewCandidateId: string | null;
   /** featureRecipes 중 이 날 실제로 주문에 넣은 레시피 */
   featured: string[];
+  /** 문제은행 사용 현황: 문제은행 주문 수, 생성기로 채운 일반 주문 수(후보 부족), 난이도를 대체한 수 */
+  bankStats: { bank: number; fallback: number; adjusted: number };
 }
 
 /** 복습 후보 중 오늘 낼 수 있는 것 (현재 소개된 유형, 바로 전날 복습에서 틀린 것은 쉬기) */
@@ -513,8 +596,15 @@ export function planDay(input: DayPlanInput): DayPlanResult {
   const isNormal = (k: string) => { const kk = keyKind(k); return kk === "multiBottle" || kk === "customMultiplier" || kk === "customAmount"; };
 
   /** kind만 있으면 그 유형 덱에서, keys가 있으면 그 후보 중에서 뽑는다 */
-  type Slot = { kind: OrderKind | null; keys?: string[]; reviewOf?: ReviewCandidate; special: boolean };
+  type Slot = {
+    kind: OrderKind | null; keys?: string[]; reviewOf?: ReviewCandidate; special: boolean;
+    /** 문제은행으로 채울 때 지켜야 할 유형·레시피 */
+    requireType?: LearningTypeId; requireRecipe?: string;
+    /** 정해 둔 첫 주문 (튜토리얼) */
+    fixed?: boolean;
+  };
   const slots: Slot[] = [];
+  if (input.firstOrder) slots.push({ kind: null, keys: [input.firstOrder.key], special: false, fixed: true });
 
   // 새 유형 소개
   const newT = input.newTypes;
@@ -525,7 +615,7 @@ export function planDay(input: DayPlanInput): DayPlanResult {
       .filter((c) => c.types.includes(t)).map((c) => c.key);
     const keys = recipeKeys.length ? recipeKeys
       : candidatesFor("customAmount", intro, recipes).filter((c) => c.types.includes(t)).map((c) => c.key);
-    if (keys.length) slots.push({ kind: null, keys, special: false });
+    if (keys.length) slots.push({ kind: null, keys, special: false, requireType: t });
   }
 
   // 새로 해금한 레시피 첫 주문 (가능하면 1건). 그 레시피의 여러 병·맞춤 배수 주문 중 현재 소개된 유형만
@@ -535,7 +625,7 @@ export function planDay(input: DayPlanInput): DayPlanResult {
     const mine = recipes.filter((r) => r.id === rid);
     const keys = [...candidatesFor("multiBottle", intro, mine), ...candidatesFor("customMultiplier", intro, mine)].map((c) => c.key);
     if (!keys.length) continue;
-    slots.push({ kind: null, keys, special: false });
+    slots.push({ kind: null, keys, special: false, requireRecipe: rid });
     featured.push(rid);
   }
 
@@ -574,9 +664,10 @@ export function planDay(input: DayPlanInput): DayPlanResult {
   }
   const trimmed = slots.slice(0, CUSTOMERS_PER_DAY);
 
-  // 순서: 특별 주문이 첫 손님이 되지 않게 섞기
-  let ordered = shuffle(trimmed, rng);
-  if (ordered[0].special) {
+  // 순서: 특별 주문이 첫 손님이 되지 않게 섞기 (정해 둔 첫 주문은 맨 앞 그대로)
+  const fixedFirst = trimmed[0]?.fixed ? trimmed[0] : null;
+  let ordered = fixedFirst ? [fixedFirst, ...shuffle(trimmed.slice(1), rng)] : shuffle(trimmed, rng);
+  if (!fixedFirst && ordered[0].special) {
     const j = ordered.findIndex((s) => !s.special);
     if (j > 0) [ordered[0], ordered[j]] = [ordered[j], ordered[0]];
   }
@@ -584,11 +675,13 @@ export function planDay(input: DayPlanInput): DayPlanResult {
   // 손님: 그 일차에 열린 종족 중에서. 새로 열린 종족이 없으면 한 자리에 넣는다(첫 손님은 그대로)
   const allowed = customersForDay(input.dayNumber);
   const customerIds = ordered.map(() => allowed[randomInt(rng, allowed.length)]);
+  if (input.firstOrder) customerIds[0] = input.firstOrder.customerId;
   for (const fresh of newCustomersOnDay(input.dayNumber)) {
     if (customerIds.includes(fresh)) continue;
     const counts = new Map<string, number>();
     customerIds.forEach((c) => counts.set(c, (counts.get(c) ?? 0) + 1));
     let at = customerIds.findIndex((c, i) => i > 0 && (counts.get(c) ?? 0) > 1 && !newCustomersOnDay(input.dayNumber).includes(c));
+    if (input.firstOrder && at === 0) at = -1;
     if (at < 0) at = Math.min(1, customerIds.length - 1);
     customerIds[at] = fresh;
   }
@@ -599,6 +692,14 @@ export function planDay(input: DayPlanInput): DayPlanResult {
     return p0 === "multiBottle" || p0 === "custom" || p0 === "amount" ? getRecipe(rid) : null;
   };
   const isTriple = (k: string) => (recipeOfKey(k)?.additives.length ?? 0) >= 3;
+  // 문제은행: 모든 재료가 해금된 레시피 + 소개된 유형만
+  const bankPool = input.useBank ? eligibleBank(intro, recipes) : [];
+  const tripleRecipes = new Set(recipes.filter((r) => r.additives.length >= 3).map((r) => r.id));
+  const usedToday = new Set<string>();
+  const formulasToday = new Set<string>();
+  const bankStats = { bank: 0, fallback: 0, adjusted: 0 };
+  /** 하오체로 쓰인 문제은행 대사에 맞게, 가능하면 하오체 손님(여우·늑대)에게 문제은행 주문을 맡긴다 */
+  const haoLike = (cid: string) => { const st = getCustomer(cid).style; return st === "hao" || st === "knight"; };
   const smallRecipes = recipes.filter((r) => r.additives.length < 3);
   let triples = 0;
 
@@ -610,7 +711,29 @@ export function planDay(input: DayPlanInput): DayPlanResult {
   for (let i = 0; i < ordered.length; i++) {
     const slot = ordered[i];
     let key: string;
-    if (slot.keys) {
+    // 문제은행 우선 (정해 둔 첫 주문·복습·생활 소재·비교 주문 자리는 제외)
+    const bankSlot = input.useBank && !slot.fixed && !slot.reviewOf && !slot.special;
+    const bp = bankSlot
+      ? pickBankQuestion({
+          dayNumber: input.dayNumber, candidates: bankPool, deck: decks[BANK_DECK], rng, usedToday, formulasToday,
+          requireType: slot.requireType, requireRecipe: slot.requireRecipe,
+          allowTriple: triples < MAX_TRIPLE_PER_DAY, tripleRecipes,
+        })
+      : null;
+    if (bankSlot) {
+      if (bp) bankStats.bank++;
+      else bankStats.fallback++;
+      if (bp?.adjusted) bankStats.adjusted++;
+    }
+    if (bp) {
+      key = `bank:${bp.question.id}`;
+      decks[BANK_DECK] = bp.deck;
+      usedToday.add(bp.question.id);
+      if (!haoLike(customerIds[i])) {
+        const j = customerIds.findIndex((cid, k) => k > i && haoLike(cid));
+        if (j > i) [customerIds[i], customerIds[j]] = [customerIds[j], customerIds[i]];
+      }
+    } else if (slot.keys) {
       // 정해진 후보(새 유형·복습) 중에서: 최근에 낸 키와 직전 병 수는 가능하면 피한다
       const recent = new Set(Object.values(decks).map((d) => d.lastDrawn));
       const capped = triples >= MAX_TRIPLE_PER_DAY ? slot.keys.filter((k) => !isTriple(k)) : slot.keys;
@@ -637,6 +760,7 @@ export function planDay(input: DayPlanInput): DayPlanResult {
     const pool = triples >= MAX_TRIPLE_PER_DAY && smallRecipes.length ? smallRecipes : recipes;
     let order = createOrderFromKey(key, { orderNumber: n, customerId, rng, recipes: pool });
     if (getRecipe(order.recipeId).additives.length >= 3) triples++;
+    for (const t of order.tasks) if (t.mode === "calc") formulasToday.add(bankFormula(t.problem.a, t.problem.b));
     // 외형은 문제 난수와 따로, 주문 번호로 정한다. 바로 앞 손님과 같은 외형은 피한다
     const appearanceId = pickAppearance(customerId, n, lastAppearance);
     if (appearanceId) order = { ...order, appearanceId };
@@ -655,7 +779,7 @@ export function planDay(input: DayPlanInput): DayPlanResult {
     orders.push({ ...order, status: i === 0 ? "arrived" : "queued" });
     n++;
   }
-  return { orders, decks, nextOrderNumber: n, reviewCandidateId, featured };
+  return { orders, decks, nextOrderNumber: n, reviewCandidateId, featured, bankStats };
 }
 
 /** 재료 3종 레시피 주문의 하루 최대 건수 */
@@ -663,7 +787,7 @@ export const MAX_TRIPLE_PER_DAY = 2;
 
 export function keyKind(key: string): OrderKind {
   const p = key.split(":")[0];
-  return p === "multiBottle" ? "multiBottle" : p === "custom" ? "customMultiplier" : p === "amount" ? "customAmount" : p === "life" ? "lifeItem" : "pointShift";
+  return p === "multiBottle" ? "multiBottle" : p === "custom" ? "customMultiplier" : p === "amount" ? "customAmount" : p === "life" ? "lifeItem" : p === "bank" ? "bank" : "pointShift";
 }
 
 /** 이 날 처음 소개되는 유형 */

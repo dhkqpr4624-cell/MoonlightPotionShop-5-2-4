@@ -21,12 +21,16 @@ import type { DeckState } from "../src/lib/deck.ts";
 
 const NEW_RECIPES = Object.values(RECIPES).filter((r) => !r.legacy && r.id !== "energy" && r.id !== "wind").map((r) => r.id);
 
-export interface RunResult { unlockDay: Record<string, number>; income: number[]; money: number[] }
+export interface RunResult {
+  unlockDay: Record<string, number>; income: number[]; money: number[];
+  /** 일차별 문제은행 사용: 문제은행 주문 수 / 생성기로 채운 일반 자리 수 / 난이도 대체 수 / 난이도별 문항 수 */
+  bank: { bank: number; fallback: number; adjusted: number; diff: Record<string, number> }[];
+}
 
 /** 장식·편의품을 재료보다 먼저 사는 경우 (살 수 있으면 이 순서로 먼저 산다) */
 export const DECOR_FIRST = ["glasses", "autoCauldron", "counter:royal", "wall:royal", "bench:royal"];
 
-export function simulate(p: number, seed: number, days = 45, shopFirst: string[] = []): RunResult {
+export function simulate(p: number, seed: number, days = 45, shopFirst: string[] = [], useBank = true): RunResult {
   const rng = createRng(seed);
   let unlocked = ["energyHerb"];
   let money = 0;
@@ -36,14 +40,18 @@ export function simulate(p: number, seed: number, days = 45, shopFirst: string[]
   const unlockDay: Record<string, number> = {};
   const income: number[] = [];
   const moneyLog: number[] = [];
+  const bankLog: RunResult["bank"] = [];
   for (let day = 1; day <= days; day++) {
     const stage = Math.min(day - 1, MAX_INTRO_STAGE);
     const prev = day === 1 ? null : Math.min(day - 2, MAX_INTRO_STAGE);
     const r = planDay({
       dayNumber: day, unlocked, introStage: stage, newTypes: prev !== null && prev >= stage ? [] : INTRO_STAGES[stage],
-      decks, nextOrderNumber: next, review: [], rng: createRng(seed * 1000 + day), featureRecipes: featured,
+      decks, nextOrderNumber: next, review: [], rng: createRng(seed * 1000 + day), featureRecipes: featured, useBank,
     });
     decks = r.decks; next = r.nextOrderNumber;
+    const diff: Record<string, number> = { 하: 0, 중: 0, 상: 0 };
+    for (const o of r.orders) if (o.bank) diff[o.bank.difficulty]++;
+    bankLog.push({ ...r.bankStats, diff });
     featured = featured.filter((f) => !r.featured.includes(f));
     let earned = 0;
     for (const o of r.orders) {
@@ -69,7 +77,7 @@ export function simulate(p: number, seed: number, days = 45, shopFirst: string[]
     }
     moneyLog.push(money);
   }
-  return { unlockDay, income, money: moneyLog };
+  return { unlockDay, income, money: moneyLog, bank: bankLog };
 }
 
 function median(xs: number[]): number { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; }

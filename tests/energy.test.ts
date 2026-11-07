@@ -228,7 +228,7 @@ test("리듀서 UNLOCK_INGREDIENT: 실제 데이터로만, 이미 해금이면 �
 
 test("저장: 해금 목록 검사 (기력초 빠짐·없는 재료·중복은 거부), 저장 → 복구 같음", () => {
   const s = run(createInitialState(), { type: "START", seed: 3 });
-  assert.equal(s.saveVersion, 6);
+  assert.equal(s.saveVersion, 7);
   const r = validateState(roundTrip(s));
   assert.ok(r.ok);
   if (r.ok) assert.deepEqual(r.state, s);
@@ -268,7 +268,7 @@ test("3단계 저장(v3, 실제 3단계 코드로 만든 젓는 중 저장) → 
   const s = l.state;
   assert.equal(l.migratedFrom, 3);
   assert.equal(store.mem.get("moonlight-potion-shop/backup-v3"), raw, "원본 백업");
-  assert.equal(s.saveVersion, 6);
+  assert.equal(s.saveVersion, 7);
   assert.deepEqual(s.unlockedIngredients, ["energyHerb"]);
   assert.equal(s.money, v3.money);
   assert.deepEqual(s.day!.orders, v3.day.orders, "진행 중인 하루의 주문 그대로");
