@@ -8,6 +8,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { getCustomer } from "../data/customers.ts";
 import { appearanceOf, type Appearance } from "../data/appearances.ts";
 import { getRecipe } from "../data/recipes.ts";
+import { reminderLine } from "../data/dialogues.ts";
 import { SHOP_ART } from "../data/shopArt.ts";
 import { assetUrl } from "../lib/assets.ts";
 import { isLastCustomer, type Action } from "../game/reducer.ts";
@@ -132,7 +133,8 @@ export function CounterScene({
   const mood = moodOf(order);
   const lines =
     order.status === "arrived" ? [order.script.greet, order.script.original]
-    : order.status === "brewing" ? [order.script.waiting]
+    // 기다리는 동안에도 분위기 말만 하지 않고 주문한 포션과 병 수를 함께 말한다
+    : order.status === "brewing" ? [order.script.waiting, reminderLine(customer.style, getRecipe(order.recipeId).name, order.bottles)]
     : order.status === "bottled" ? [customer.lines.receive[0]]
     : [order.script.reaction ?? ""];
 

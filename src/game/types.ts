@@ -374,7 +374,7 @@ export interface TutorialState {
 }
 
 export interface GameState {
-  saveVersion: 7;
+  saveVersion: 8;
   scene: Scene;
   money: number;
   nextOrderNumber: number;

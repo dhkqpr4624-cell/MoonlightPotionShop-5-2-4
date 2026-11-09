@@ -44,13 +44,16 @@ export function tryEquip(shop: ShopState, slot: DecorSlot, theme: ThemeId): Shop
 
 export function trySetGadget(shop: ShopState, id: GadgetId, on: boolean): ShopState | null {
   if (!GADGETS.some((g) => g.id === id)) return null;
+  // 마녀의 자동 솥은 켜기·끄기가 없다 (가지고 있으면 늘 적용)
+  if (id === "autoCauldron") return null;
   if (on && !shop.owned.includes(id)) return null;
   if (shop.toggles[id] === on) return null;
   return { ...shop, toggles: { ...shop.toggles, [id]: on } };
 }
 
-/** 편의품이 실제로 켜져 있는지 (산 것 + 켬) */
+/** 편의품이 실제로 켜져 있는지 (산 것 + 켬). 자동 솥은 가지고 있으면 늘 켜진 것으로 본다 */
 export function gadgetOn(shop: ShopState, id: GadgetId): boolean {
+  if (id === "autoCauldron") return shop.owned.includes(id);
   return shop.owned.includes(id) && shop.toggles[id];
 }
 

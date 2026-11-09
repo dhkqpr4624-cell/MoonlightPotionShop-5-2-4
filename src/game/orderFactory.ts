@@ -377,8 +377,8 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
     );
     const script: OrderScript = {
       greet, waiting, reaction: null,
-      original: fillLine(each ? T.lifeEachOriginal : T.lifeRatioOriginal, v),
-      easy: fillLine(each ? T.lifeEachEasy : T.lifeRatioEasy, v) + otherNote,
+      original: fillLine(each ? T.lifeEachOriginal : T.lifeRatioOriginal, v) + otherNote,
+      easy: `${styledCopula(`${recipe.name} 한 병`, customer.style)}. ` + fillLine(each ? T.lifeEachEasy : T.lifeRatioEasy, v) + otherNote,
       memo: [
         `포션: ${recipe.name} 1병 (손님 지정 특별 주문)`,
         `${target.name}(${target.unit}): ${condition} — 손님 지정이 레시피보다 우선`,
@@ -406,12 +406,13 @@ export function createOrderFromKey(key: string, ctx: BuildContext): Order {
       }),
       concept,
     };
-    const v = { refA: concept.refA, refB: concept.refB, p: concept.refProduct, newA: concept.newA, newB: concept.newB, ing: main.name, u: main.unit,
+    const v = { potion: recipe.name, refA: concept.refA, refB: concept.refB, p: concept.refProduct, newA: concept.newA, newB: concept.newB, ing: main.name, u: main.unit,
       prev: `${concept.refA} × ${concept.refB} = ${concept.refProduct}${main.unit}`, now: `${concept.newA} × ${concept.newB}${main.unit}` };
     const otherNote = rest.length ? fillLine(T.otherNote, { other: rest.map((ad) => getIngredient(ad.ingredientId).name).join(", ") }) : "";
     const script: OrderScript = {
       greet, waiting, reaction: null,
-      original: fillLine(T.shiftOriginal, v),
+      // 다른 재료의 조건(1병 기본량)은 '네?' 전에 원래 말에서도 알려 준다
+      original: fillLine(T.shiftOriginal, v) + otherNote,
       easy: fillLine(T.shiftEasy, v) + otherNote,
       memo: [
         `포션: ${recipe.name} 1병 (손님 지정 특별 주문)`,
@@ -445,6 +446,41 @@ export function bankOrderPrice(recipe: Recipe, bottles: number | null): number {
 }
 
 /**
+ * 문제은행 주문의 대사·재설명·주문서 메모 (문항 ID로 만든다. 저장된 옛 주문의 문구를 새로 고칠 때도 쓴다)
+ *  - 대사 = 문항 question (포션·병 수·지정 재료와 양·1병당/배수 조건, 계산 질문 없음)
+ *  - '네?' = 문항 clarification (같은 조건을 쉽게. 다른 재료 조건이 빠진 문항이면 한 문장 덧붙임)
+ */
+export function bankScriptText(questionId: string): Pick<OrderScript, "original" | "easy" | "memo"> {
+  const q = getBankQuestion(questionId);
+  const recipe = getRecipe(q.recipeId);
+  const ing = getIngredient(q.ingredientId);
+  const perBottle = q.mulType === "소수×자연수";
+  const n = String(q.bottles);
+  const others = recipe.additives.filter((ad) => ad.ingredientId !== ing.id);
+  const otherNames = others.map((ad) => getIngredient(ad.ingredientId).name).join(", ");
+  const mentions = /다른 재료|나머지 재료/.test(q.clarification);
+  const otherEasy = !others.length || mentions ? ""
+    : perBottle ? fillLine(" {other}는 레시피북의 1병당 양으로 {n}병만큼 넣어 주시오.", { other: otherNames, n })
+    : fillLine(DIALOGUES.hao.otherNote, { other: otherNames });
+  const otherMemo = others.map((ad) => {
+    const x = getIngredient(ad.ingredientId);
+    return perBottle ? `${x.name}(${x.unit}): 기본 조건 — 레시피북의 1병당 양으로 ${n}병만큼` : `${x.name}(${x.unit}): 기본 조건 — 레시피북의 1병 기본량 그대로`;
+  });
+  return {
+    original: q.question,
+    easy: q.clarification + otherEasy,
+    memo: [
+      `포션: ${recipe.name} ${perBottle ? `${n}병` : "1병"} (손님 지정량 특별 주문)`,
+      perBottle
+        ? `${ing.name}(${ing.unit}): 특별 조건 — 손님이 정한 1병당 ${q.a}${ing.unit}씩 ${n}병만큼 (레시피보다 우선)`
+        : `${ing.name}(${ing.unit}): 특별 조건 — 손님이 알려 준 기준 ${q.a}${ing.unit}의 ${q.b}배, 이 재료만 (레시피보다 우선)`,
+      ...otherMemo,
+      perBottle ? `기본 용액은 1병에 ${recipe.baseSolution.amountMl}mL씩 자동` : `기본 용액은 1병 ${recipe.baseSolution.amountMl}mL 자동`,
+    ],
+  };
+}
+
+/**
  * 문제은행 주문: 문항 하나 = 지정 재료 하나의 계산 과제(원문 인수 그대로).
  *  perBottle(소수×자연수): 지정 재료는 손님이 정한 1병당 양 × 병 수, 다른 재료는 레시피 1병당 양 × 병 수(계산 과제)
  *  base(그 밖):          지정 재료는 손님이 알려 준 기준량 × 배수(1병), 다른 재료는 레시피 1병 기본량 그대로(지정량 계량)
@@ -459,8 +495,6 @@ function createBankOrder(
   const ing = getIngredient(q.ingredientId);
   const perBottle = q.mulType === "소수×자연수";
   const n = String(q.bottles);
-  const others = recipe.additives.filter((ad) => ad.ingredientId !== ing.id);
-  const otherNames = others.map((ad) => getIngredient(ad.ingredientId).name).join(", ");
   const tasks: IngredientTask[] = recipe.additives.map((ad) => {
     if (ad.ingredientId === ing.id) {
       return blankTask(c.id, ing.id, "calc", {
@@ -470,26 +504,7 @@ function createBankOrder(
     }
     return perBottle ? calcTask(c.id, ad.ingredientId, ad.amount, n, "bottles") : specifiedTask(c.id, ad.ingredientId, ad.amount);
   });
-  const otherEasy = !others.length ? ""
-    : perBottle ? fillLine(" {other}는 레시피북의 1병당 양으로 {n}병만큼 넣어 주시오.", { other: otherNames, n })
-    : fillLine(DIALOGUES.hao.otherNote, { other: otherNames });
-  const otherMemo = others.map((ad) => {
-    const x = getIngredient(ad.ingredientId);
-    return perBottle ? `${x.name}(${x.unit}): 기본 조건 — 레시피북의 1병당 양으로 ${n}병만큼` : `${x.name}(${x.unit}): 기본 조건 — 레시피북의 1병 기본량 그대로`;
-  });
-  const script: OrderScript = {
-    greet: c.greet, waiting: c.waiting, reaction: null,
-    original: q.question,
-    easy: q.clarification + otherEasy,
-    memo: [
-      `포션: ${recipe.name} ${perBottle ? `${n}병` : "1병"} (손님 지정량 특별 주문)`,
-      perBottle
-        ? `${ing.name}(${ing.unit}): 특별 조건 — 손님이 정한 1병당 ${q.a}${ing.unit}씩 ${n}병만큼 (레시피보다 우선)`
-        : `${ing.name}(${ing.unit}): 특별 조건 — 손님이 알려 준 기준 ${q.a}${ing.unit}의 ${q.b}배 (레시피보다 우선)`,
-      ...otherMemo,
-      perBottle ? `기본 용액은 1병에 ${recipe.baseSolution.amountMl}mL씩 자동` : `기본 용액은 1병 ${recipe.baseSolution.amountMl}mL 자동`,
-    ],
-  };
+  const script: OrderScript = { greet: c.greet, waiting: c.waiting, reaction: null, ...bankScriptText(q.id) };
   return {
     ...c.base, kind: "bank", recipeId: recipe.id, bottles: perBottle ? q.bottles : 1, multiplier: null, life: null,
     bank: { questionId: q.id, difficulty: q.difficulty, form: perBottle ? "perBottle" : "base", ingredientId: ing.id },

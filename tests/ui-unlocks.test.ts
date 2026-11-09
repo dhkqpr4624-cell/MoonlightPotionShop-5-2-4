@@ -303,7 +303,7 @@ test("잘못 만든 포션: 여러 병 주문은 병 수 그대로, 1병 주문�
 test("저장 v5: 새 항목 검사 (안내·첫 주문 목록은 해금된 레시피만)", () => {
   const s = run({ ...createInitialState(), money: 300 }, { type: "START", seed: 5 },
     { type: "UNLOCK_INGREDIENT", ingredientId: "featherGrass" }, { type: "UNLOCK_INGREDIENT", ingredientId: "windShard" });
-  assert.equal(s.saveVersion, 7);
+  assert.equal(s.saveVersion, 8);
   const ok = validateState(roundTrip(s));
   assert.ok(ok.ok);
   if (ok.ok) assert.deepEqual(ok.state, s);
@@ -330,7 +330,7 @@ test("v4 저장(실제 직전 버전 코드로 만든 계량 중·젓는 중) �
     const s = l.state;
     assert.equal(l.migratedFrom, 4);
     assert.equal(store.mem.get("moonlight-potion-shop/backup-v4"), raw, "원본 백업");
-    assert.equal(s.saveVersion, 7);
+    assert.equal(s.saveVersion, 8);
     assert.equal(s.scene, v4.scene, "화면 그대로 이어감");
     assert.equal(s.money, v4.money, "돈을 보충하지 않음");
     assert.deepEqual(s.unlockedIngredients, ["energyHerb"], "새 재료는 잠김, 구매 내역 지어내지 않음");

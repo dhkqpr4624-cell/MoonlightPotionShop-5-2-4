@@ -20,7 +20,7 @@ import { createRng } from "../src/lib/rng.ts";
 import type { GameState, Order } from "../src/game/types.ts";
 import { answerActive, closeAndNext, memoryStorage, NOW, order, playFullDay, roundTrip, run, serveCurrent, submit, wrongAnswer } from "./helpers.ts";
 
-const TXT = readFileSync(new URL("../docs/question-bank/Moonlight-Potion-Shop-180-Questions.txt", import.meta.url), "utf8");
+const TXT = readFileSync(new URL("../docs/question-bank/Moonlight-Potion-Shop-180-Questions-Revised.txt", import.meta.url), "utf8");
 const ALL = Object.values(INGREDIENTS).filter((i) => !i.legacy).map((i) => i.id);
 
 test("문제은행 원본: 180문항, 난이도 3 × 유형 3 × 20, ID·필수 필드, 오류 0", () => {
@@ -33,8 +33,9 @@ test("문제은행 원본: 180문항, 난이도 3 × 유형 3 × 20, ID·필수 
   }
   // 게임 데이터 파일은 원본 변환 결과와 같다
   assert.deepEqual(JSON.parse(JSON.stringify(QUESTION_BANK)), JSON.parse(JSON.stringify(questions)));
-  // 고친 것은 숫자 뒤 '을/를' 조사뿐 (숫자·식은 그대로)
-  for (const f of report.josaFixes) assert.equal(f.before.replace(/[을를]/g, ""), f.after.replace(/[을를]/g, ""), f.id);
+  // 고친 것은 조사(은/는·이/가·을/를)와 '모두 N병' 병 수 명시뿐 (숫자·식은 그대로)
+  const strip = (t: string) => t.replace(/, 모두 \d+병/g, "").replace(/[은는이가을를]/g, "");
+  for (const f of report.josaFixes) assert.equal(strip(f.before), strip(f.after), f.id);
 });
 
 test("문제은행 정답: 십진 정수 연산으로 다시 계산해 모두 일치, 인수 소수 두 자리 이하, 곱 네 자리 이하", () => {
@@ -286,7 +287,7 @@ test("v6 저장(실제 직전 버전 코드로 만든 젓는 중) → v7: 진행
   const s = l.state as GameState;
   assert.equal(l.migratedFrom, 6);
   assert.equal(store.mem.get("moonlight-potion-shop/backup-v6"), raw);
-  assert.equal(s.saveVersion, 7);
+  assert.equal(s.saveVersion, 8);
   assert.equal(s.tutorial, null);
   for (const k of ["scene", "money", "day", "shop", "unlockedIngredients", "problemLog", "review", "paidOrderIds", "decks", "draftAnswer", "activeTask"]) {
     assert.deepEqual((s as unknown as Record<string, unknown>)[k], v6[k], k);

@@ -115,7 +115,7 @@ export const GADGETS: GadgetItem[] = [
     id: "autoCauldron",
     name: "마녀의 자동 솥",
     price: 220,
-    description: "필요한 재료를 모두 계량해 넣으면 솥이 스스로 저어 줘요. 계량 문제와 넣기는 그대로 직접 해요.",
+    description: "재료를 모두 넣으면 포션이 바로 완성됩니다. (계량 문제와 넣기는 그대로 직접 하고, 젓기와 병에 담기를 건너뛰어요. 완성한 포션은 창구에서 직접 전달해요.)",
   },
 ];
 

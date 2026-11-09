@@ -47,9 +47,6 @@ import { clientToLocal } from "./Stage.tsx";
 export const POUR_MS = 1200;
 export const BOTTLE_MS = 1600;
 const DRAG_THRESHOLD = 8;
-/** 자동 솥: 0.12초마다 3% (약 4초에 다 저음) */
-const AUTO_STIR_MS = 120;
-const AUTO_STIR_STEP = 3;
 
 /** 액체 수면 (항아리 안쪽 타원보다 조금 작게: 안쪽 벽이 보이게) */
 /**
@@ -133,7 +130,6 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
   const benchTheme = state.shop.equipped.bench;
   applyPotOf(benchTheme);
   const glassesOn = gadgetOn(state.shop, "glasses");
-  const autoOn = gadgetOn(state.shop, "autoCauldron");
   const allDone = allTasksDone(order);
   const stirred = isStirred(order);
   const brewing = order.status === "brewing";
@@ -376,20 +372,8 @@ export function WorkbenchScene({ state, order, dispatch, hud, overlayOpen = fals
     [dispatch],
   );
 
-  /* 마녀의 자동 솥: 모든 재료를 넣은 뒤(stirMode)에만, 손으로 잡고 있지 않을 때 조금씩 젓는다.
-     기존 STIR 규칙을 그대로 쓰므로 진행률은 저장되고(새로고침해도 이어짐), 100%에서 멈추며, 병에 담기는 직접 누른다. */
-  const autoStirring = autoOn && stirMode && !holding;
-  useEffect(() => {
-    if (!autoStirring) return;
-    let ang = 0;
-    const t = window.setInterval(() => {
-      ang += 0.45;
-      swirlAngle.current = (swirlAngle.current + 14) % 360;
-      drawStick({ x: Math.cos(ang) * 0.45, y: Math.sin(ang) * 0.4 });
-      dispatch({ type: "STIR", orderId: orderIdRef.current, amount: AUTO_STIR_STEP });
-    }, AUTO_STIR_MS);
-    return () => window.clearInterval(t);
-  }, [autoStirring, dispatch, drawStick]);
+  /* 마녀의 자동 솥: 느린 자동 젓기는 없다. 마지막 재료를 넣는 순간 게임 규칙(reducer ADD_TO_CAULDRON)이
+     바로 병에 담긴 완성 상태로 바꾸므로 이 화면은 그 결과(창구로 가져가기)만 보여 준다. */
 
   const toTip = (clientX: number, clientY: number): Point | null => {
     const c = toCanvas(clientX, clientY);

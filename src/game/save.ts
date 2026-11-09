@@ -2,7 +2,7 @@
  * 저장·불러오기·검증·마이그레이션 (저장 버전 6).
  *
  * - localStorage 키 하나에 게임 상태 전체(JSON 하나)를 저장한다.
- * - 버전 1 → 2 → 3 → 4 → 5 → 6 → 7 순서로 자동으로 옮긴다. 옮기기 전 원본은 백업 키(backup-v○)에 보관.
+ * - 버전 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 순서로 자동으로 옮긴다. 옮기기 전 원본은 백업 키(backup-v○)에 보관.
  * - 손상되었거나 규칙·참조가 맞지 않거나 더 새로운 버전인 저장은 덮어쓰지 않고 오류로 돌려준다.
  */
 import { isAppearanceOf } from "../data/appearances.ts";
@@ -16,12 +16,12 @@ import { equals, isDecimalString, multiplyStrings, parseDecimal, toDecimalString
 import { type DeckState } from "../lib/deck.ts";
 import { migrateV1toV2, validateV2State } from "./legacy/v2save.ts";
 import type * as V2 from "./legacy/v2types.ts";
-import { bankOrderPrice, shiftConcept, SHIFT_VARIANTS } from "./orderFactory.ts";
+import { bankOrderPrice, bankScriptText, shiftConcept, SHIFT_VARIANTS } from "./orderFactory.ts";
 import { qualityOf, rewardForOrder } from "./outcome.ts";
 import { freeIngredients, isRecipeAvailable, normalizeUnlocked, shopIngredients } from "./unlocks.ts";
 import { DECOR_SLOTS, GADGETS, SHOP_ITEM_IDS, THEME_IDS, type ThemeId } from "../data/shop.ts";
 import { defaultShop } from "./shop.ts";
-import { MAX_HINT_LEVEL } from "./reducer.ts";
+import { autoCompleteIfReady, MAX_HINT_LEVEL } from "./reducer.ts";
 import {
   CUSTOMERS_PER_DAY,
   STIR_TARGET,
@@ -34,7 +34,7 @@ import {
 
 export const SAVE_KEY = "moonlight-potion-shop/save";
 export const BACKUP_KEY_PREFIX = "moonlight-potion-shop/backup-";
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -333,7 +333,7 @@ function validateLegacyRecord(r: unknown, i: number): string[] {
   return ok ? [] : [`${w}: 필수 값이 빠졌거나 형식이 다릅니다.`];
 }
 
-/** 버전 7 저장 데이터 전체 검증 */
+/** 버전 8 저장 데이터 전체 검증 */
 export function validateState(data: unknown): { ok: true; state: GameState } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   if (!isObject(data)) return { ok: false, errors: ["저장 데이터가 객체 형식이 아닙니다."] };
@@ -588,6 +588,49 @@ export function migrateV6toV7(v6: Obj): Obj {
   return { ...v6, saveVersion: 7, tutorial: null };
 }
 
+/**
+ * 버전 7 → 8 (주문 대사 개선·자동 솥 즉시 완성 버전)
+ * - 모든 진행(돈·일차·오늘 주문과 수치·계량·젓기·지급·학습 기록·해금·상점·튜토리얼): 그대로
+ * - 마녀의 자동 솥은 켜기·끄기가 없어졌으므로, 가지고 있으면 켜짐(true)으로 정리한다(보유 여부는 그대로)
+ * - 문제은행 주문 대사와 자동 솥 완성 정리는 검사를 통과한 뒤 normalizeLoaded()에서 한다
+ */
+export function migrateV7toV8(v7: Obj): Obj {
+  const shop = isObject(v7.shop) ? (v7.shop as Obj) : null;
+  const owned = shop && Array.isArray(shop.owned) ? (shop.owned as unknown[]) : [];
+  const toggles = shop && isObject(shop.toggles) ? (shop.toggles as Obj) : null;
+  return {
+    ...v7,
+    saveVersion: 8,
+    ...(shop && toggles ? { shop: { ...shop, toggles: { ...toggles, autoCauldron: owned.includes("autoCauldron") } } } : {}),
+  };
+}
+
+/**
+ * 불러온(검사를 통과한) 상태 정리 — 몇 번 해도 결과가 같다.
+ * 1) 문제은행 주문의 대사·재설명·주문서 메모를 개선된 문항 문구로: 문항 ID가 있고, 저장된 지정 재료·인수가 그 문항과
+ *    똑같을 때만 바꾼다(인사·기다림·반응 말과 주문 수치·진행·보상은 그대로). 조건이 다른 주문은 새 문항으로 바꾸지 않는다.
+ * 2) 자동 솥을 가졌고 현재 주문의 모든 재료를 이미 넣었는데 아직 젓기·병 담기 단계면 완성 상태로 정리(지급은 전달할 때 한 번).
+ *    이미 전달한 주문은 건드리지 않는다.
+ */
+export function normalizeLoaded(state: GameState): GameState {
+  let s = state;
+  if (s.day) {
+    let changed = false;
+    const orders = s.day.orders.map((o) => {
+      if (o.kind !== "bank" || !o.bank) return o;
+      const q = BANK_BY_ID.get(o.bank.questionId);
+      const t = o.tasks.find((x) => x.problem.bankId === o.bank!.questionId);
+      if (!q || !t || t.ingredientId !== q.ingredientId || t.problem.a !== q.a || t.problem.b !== q.b || o.recipeId !== q.recipeId) return o;
+      const txt = bankScriptText(q.id);
+      if (o.script.original === txt.original && o.script.easy === txt.easy && JSON.stringify(o.script.memo) === JSON.stringify(txt.memo)) return o;
+      changed = true;
+      return { ...o, script: { ...o.script, ...txt } };
+    });
+    if (changed) s = { ...s, day: { ...s.day, orders } };
+  }
+  return autoCompleteIfReady(s);
+}
+
 export function migrateV4toV5(v4: Obj): Obj {
   const list = isStrArray(v4.unlockedIngredients) ? v4.unlockedIngredients : [];
   return { ...v4, saveVersion: 5, unlockedIngredients: normalizeUnlocked(list), recipeNotices: [], featuredRecipes: [] };
@@ -601,29 +644,33 @@ export type InterpretResult =
   | { ok: true; state: GameState; migratedFrom: number | null }
   | { ok: false; kind: "invalid" | "unsupportedVersion"; errors: string[] };
 
-export function interpretSaveData(data: unknown, seed: number): InterpretResult {
+function interpretRaw(data: unknown, seed: number): InterpretResult {
   if (!isObject(data)) return { ok: false, kind: "invalid", errors: ["저장 데이터가 객체 형식이 아닙니다."] };
   const v = data.saveVersion;
   if (v === SAVE_VERSION) {
     const r = validateState(data);
     return r.ok ? { ok: true, state: r.state, migratedFrom: null } : { ok: false, kind: "invalid", errors: r.errors };
   }
+  if (v === 7) {
+    const r = validateState(migrateV7toV8(data));
+    return r.ok ? { ok: true, state: r.state, migratedFrom: 7 } : { ok: false, kind: "invalid", errors: r.errors };
+  }
   if (v === 6) {
-    const r = validateState(migrateV6toV7(data));
+    const r = validateState(migrateV7toV8(migrateV6toV7(data)));
     return r.ok ? { ok: true, state: r.state, migratedFrom: 6 } : { ok: false, kind: "invalid", errors: r.errors };
   }
   if (v === 5) {
     // 진행 상태(화면 포함)를 그대로 이어 간다
-    const r = validateState(migrateV6toV7(migrateV5toV6(data)));
+    const r = validateState(migrateV7toV8(migrateV6toV7(migrateV5toV6(data))));
     return r.ok ? { ok: true, state: r.state, migratedFrom: 5 } : { ok: false, kind: "invalid", errors: r.errors };
   }
   if (v === 4) {
-    const r = validateState(migrateV6toV7(migrateV5toV6(migrateV4toV5(data))));
+    const r = validateState(migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(data)))));
     return r.ok ? { ok: true, state: r.state, migratedFrom: 4 } : { ok: false, kind: "invalid", errors: r.errors };
   }
   if (v === 3) {
     // 옮긴 사실을 처음 화면에서 알려 주도록 타이틀에서 시작 (이어하기를 누르면 그 화면으로 돌아간다: 제조 진행은 그대로)
-    const r = validateState({ ...migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(data)))), scene: "title" });
+    const r = validateState({ ...migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(data))))), scene: "title" });
     return r.ok ? { ok: true, state: r.state, migratedFrom: 3 } : { ok: false, kind: "invalid", errors: r.errors };
   }
   if (v === 1 || v === 2) {
@@ -637,7 +684,7 @@ export function interpretSaveData(data: unknown, seed: number): InterpretResult 
       if (!r2.ok) return { ok: false, kind: "invalid", errors: r2.errors };
       v2 = r2.state;
     }
-    const migrated = migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4({ ...migrateV2toV3(v2), scene: "title" as const } as unknown as Obj))));
+    const migrated = migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4({ ...migrateV2toV3(v2), scene: "title" as const } as unknown as Obj)))));
     const r3 = validateState(migrated);
     if (!r3.ok) return { ok: false, kind: "invalid", errors: [`Phase ${v} 저장을 옮기는 중 문제가 생겼습니다.`, ...r3.errors] };
     return { ok: true, state: r3.state, migratedFrom: v };
@@ -646,6 +693,13 @@ export function interpretSaveData(data: unknown, seed: number): InterpretResult 
     return { ok: false, kind: "unsupportedVersion", errors: [`이 게임보다 새로운 버전(${v})의 저장입니다. 게임을 최신 버전으로 열어 주세요.`] };
   }
   return { ok: false, kind: "invalid", errors: ["저장 버전 정보가 없거나 알 수 없습니다."] };
+}
+
+/** 저장 데이터 해석 + 정리(normalizeLoaded). 불러오기·가져오기가 함께 쓴다 */
+export function interpretSaveData(data: unknown, seed: number): InterpretResult {
+  const r = interpretRaw(data, seed);
+  return r.ok ? { ...r, state: normalizeLoaded(r.state) } : r;
+
 }
 
 export type LoadResult =

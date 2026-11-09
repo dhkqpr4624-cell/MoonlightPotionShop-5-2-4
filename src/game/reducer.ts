@@ -78,7 +78,7 @@ export type Action =
 
 export function createInitialState(): GameState {
   return {
-    saveVersion: 7,
+    saveVersion: 8,
     scene: "title",
     money: 0,
     nextOrderNumber: 1,
@@ -126,6 +126,30 @@ export function isLastCustomer(day: DayState): boolean {
 export { isLearningTask };
 
 const RESET_WORK = { activeTask: null, draftAnswer: "", feedback: null, pour: null } as const;
+
+/** 마녀의 자동 솥: 보유만 하면 적용 (켜기·끄기 없음) */
+export function hasAutoCauldron(state: Pick<GameState, "shop">): boolean {
+  return state.shop.owned.includes("autoCauldron");
+}
+
+/** 주문을 병에 담은 완성 상태로: 품질·판매금을 이때 확정해 저장한다 (지급은 창구에서 전달할 때 한 번) */
+function bottle(order: Order): Order {
+  const quality = qualityOf(order);
+  const reward = rewardForOrder(order, quality);
+  return { ...order, status: "bottled", stirProgress: STIR_TARGET, quality, reward, script: { ...order.script, reaction: reactionLine(order, quality) } };
+}
+
+/**
+ * 자동 솥 즉시 완성: 자동 솥을 가졌고, 현재 주문이 제조 중이며, 모든 필수 재료를 실제로 넣었으면
+ * 젓기·병에 담기를 건너뛰고 병에 담긴 완성 상태로 바꾼다. 조건이 아니면 상태를 그대로 돌려준다(여러 번 불러도 한 번만 바뀜).
+ * 오답으로 넣은 양은 그대로 두므로 품질·감액은 기존 규칙대로다. 아직 넣지 않은 재료가 있으면 아무것도 하지 않는다.
+ */
+export function autoCompleteIfReady(state: GameState): GameState {
+  if (!hasAutoCauldron(state) || !state.day || state.day.status !== "open" || state.activeTask !== null) return state;
+  const order = state.day.orders[state.day.currentIndex];
+  if (!order || order.status !== "brewing" || !allTasksDone(order)) return state;
+  return withOrder(state, bottle(order));
+}
 
 /** 새 영업일 준비 (주문 5건 생성 → 저장되므로 새로고침해도 같은 주문) */
 function openDay(state: GameState, dayNumber: number, introStage: number, newTypes: DayState["newTypes"], seed: number, tutorial = false): GameState {
@@ -406,13 +430,14 @@ export function reducer(state: GameState, action: Action): GameState {
       if (!task || task.status !== "measured" || task.submitted === null) return state;
       const amount = task.mode === "concept" ? task.problem.answer : toDecimalString(parseDecimal(task.submitted));
       const updated: IngredientTask = { ...task, status: "done", addedAmount: amount };
-      return {
+      // 마지막 재료를 넣으면(자동 솥 보유 시) 같은 동작 안에서 바로 완성 — 화면 애니메이션에 기대지 않는다
+      return autoCompleteIfReady({
         ...withOrder(state, updateTask(order!, action.taskIndex, updated)),
         activeTask: null,
         draftAnswer: "",
         feedback: null,
         pour: { seq: (state.pour?.seq ?? 0) + 1, ingredientId: task.ingredientId, amount, unit: task.problem.unit },
-      };
+      });
     }
 
     case "STIR": {
@@ -432,18 +457,7 @@ export function reducer(state: GameState, action: Action): GameState {
       if (!isStirred(order!)) {
         return { ...state, feedback: { kind: "notice", title: "솥을 끝까지 저어야 병에 담을 수 있어요.", lines: [] } };
       }
-      const quality = qualityOf(order!);
-      const reward = rewardForOrder(order!, quality);
-      return {
-        ...withOrder(state, {
-          ...order!,
-          status: "bottled",
-          quality,
-          reward,
-          script: { ...order!.script, reaction: reactionLine(order!, quality) },
-        }),
-        ...RESET_WORK,
-      };
+      return { ...withOrder(state, bottle(order!)), ...RESET_WORK };
     }
 
     case "DELIVER": {
@@ -515,7 +529,8 @@ export function reducer(state: GameState, action: Action): GameState {
     case "BUY_ITEM": {
       if (state.activeTask !== null) return state;
       const r = tryBuy(state.money, state.shop, action.itemId);
-      return r.ok ? { ...state, money: r.money, shop: r.shop } : state;
+      // 자동 솥을 샀을 때 이미 모든 재료를 넣고 젓는 중이었다면 그 주문도 바로 완성
+      return r.ok ? autoCompleteIfReady({ ...state, money: r.money, shop: r.shop }) : state;
     }
 
     case "EQUIP_DECOR": {

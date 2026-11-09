@@ -279,7 +279,7 @@ test("v5 저장(실제 직전 버전 코드로 만든 3일차 계량 중) → v6
   const s = l.state;
   assert.equal(l.migratedFrom, 5);
   assert.equal(store.mem.get("moonlight-potion-shop/backup-v5"), raw, "원본 백업");
-  assert.equal(s.saveVersion, 7);
+  assert.equal(s.saveVersion, 8);
   for (const k of ["scene", "money", "unlockedIngredients", "day", "draftAnswer", "activeTask", "problemLog", "review", "paidOrderIds", "dayHistory", "decks", "recipeNotices"]) {
     assert.deepEqual((s as unknown as Record<string, unknown>)[k], v5[k], k);
   }

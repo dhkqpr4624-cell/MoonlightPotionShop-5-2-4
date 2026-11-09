@@ -96,7 +96,10 @@ export function ShopModal({
                         구매 ({g.price})
                       </button>
                     )}
-                    {owned && (
+                    {owned && g.id === "autoCauldron" && (
+                      <span className="tag tag-on" data-testid="auto-cauldron-always">항상 적용</span>
+                    )}
+                    {owned && g.id !== "autoCauldron" && (
                       <label className="switch-row" data-testid={`toggle-${g.id}`}>
                         <input type="checkbox" checked={on} onChange={(e: { currentTarget: HTMLInputElement }) => onGadget(g.id, e.currentTarget.checked)} data-testid={`toggle-input-${g.id}`} />
                         <span className="switch" aria-hidden="true" />
