@@ -2,6 +2,7 @@
  * 저장·기록 관리: 저장 데이터 내보내기/가져오기, 학습 결과 내보내기.
  * 가져오기는 검사 → (문제 있으면 오류 안내, 현재 저장 유지) → 교체 확인 → 적용 순서.
  */
+import { fmtMoney } from "../lib/money.ts";
 import { useRef, useState } from "react";
 import { buildLearningExport, buildSaveExport, exportFileName, parseImportText } from "../game/transfer.ts";
 import type { GameState } from "../game/types.ts";
@@ -10,10 +11,10 @@ import { newSeed } from "../lib/rng.ts";
 import { Icon } from "./Icon.tsx";
 
 function describe(state: GameState | null): string {
-  if (!state || !state.day) return state ? `영업 시작 전 · 달빛 동전 ${state.money}개` : "없음";
+  if (!state || !state.day) return state ? `영업 시작 전 · 달빛 동전 ${fmtMoney(state.money)}개` : "없음";
   const d = state.day;
   const where = d.status === "closed" ? "영업 마감" : `손님 ${d.currentIndex + 1} / ${d.orders.length}`;
-  return `밤 ${d.dayNumber}일차 · ${where} · 달빛 동전 ${state.money}개 · 학습 기록 ${state.problemLog.length + state.legacyRecords.length}개`;
+  return `밤 ${d.dayNumber}일차 · ${where} · 달빛 동전 ${fmtMoney(state.money)}개 · 학습 기록 ${state.problemLog.length + state.legacyRecords.length}개`;
 }
 
 export function DataMenu({

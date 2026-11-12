@@ -254,7 +254,8 @@ test("튜토리얼: 새 게임 첫 주문은 여우의 기력 포션 2병(0.6 ×
   assert.equal(tutorialStep(s), "deliver");
   s = reducer(s, { type: "DELIVER", orderId: o.id, now: NOW });
   assert.equal(s.tutorial!.status, "done");
-  assert.equal(s.money, 6, "판매금만 (10의 60%), 튜토리얼 보상 없음");
+  assert.equal(s.money, -3, "잘못 만든 포션: 판매금 0, 보상금 10 ÷ 3 ≈ 3, 튜토리얼 보상 없음");
+  assert.equal(s.gameOver, null, "−3G는 영업 계속");
   assert.equal(tutorialStep(s), null);
   // 다음 손님부터는 일반 주문
   s = reducer(s, { type: "NEXT_CUSTOMER", fromOrderId: o.id });
@@ -287,7 +288,7 @@ test("v6 저장(실제 직전 버전 코드로 만든 젓는 중) → v7: 진행
   const s = l.state as GameState;
   assert.equal(l.migratedFrom, 6);
   assert.equal(store.mem.get("moonlight-potion-shop/backup-v6"), raw);
-  assert.equal(s.saveVersion, 8);
+  assert.equal(s.saveVersion, 9);
   assert.equal(s.tutorial, null);
   for (const k of ["scene", "money", "day", "shop", "unlockedIngredients", "problemLog", "review", "paidOrderIds", "decks", "draftAnswer", "activeTask"]) {
     assert.deepEqual((s as unknown as Record<string, unknown>)[k], v6[k], k);

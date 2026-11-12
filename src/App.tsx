@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { createInitialState, currentOrder, reducer, type Action } from "./game/reducer.ts";
+import { createInitialState, currentOrder, OPENING_LINES, reducer, type Action } from "./game/reducer.ts";
 import { clearSave, loadGame, saveGame } from "./game/save.ts";
 import type { GameState } from "./game/types.ts";
 import { newSeed } from "./lib/rng.ts";
@@ -11,6 +11,8 @@ import { CounterScene } from "./components/CounterScene.tsx";
 import { WorkbenchScene } from "./components/WorkbenchScene.tsx";
 import { ClosingScene } from "./components/ClosingScene.tsx";
 import { RecipeUnlockNotice } from "./components/RecipeUnlockNotice.tsx";
+import { OpeningScene } from "./components/OpeningScene.tsx";
+import { GameOverScreen } from "./components/GameOverScreen.tsx";
 import { LearningRecords } from "./components/LearningRecords.tsx";
 import { SoundSettings } from "./components/SoundSettings.tsx";
 import { ShopModal, type ShopTab } from "./components/ShopModal.tsx";
@@ -110,16 +112,36 @@ export default function App() {
     if (!loadIssue) saveGame(state);
   }, [state, loadIssue]);
 
-  /** 새로 시작하기 (타이틀에서 확인을 마친 뒤): 진행·돈·구매·해금·학습 기록을 처음으로, 첫 주문 튜토리얼과 함께 첫 영업 */
+  /**
+   * 새로 시작하기 (타이틀에서 교체 확인을 마친 뒤에만 불린다): 진행·돈·구매·해금·학습 기록을 처음으로 하고 첫 영업을 준비한 뒤
+   * 오프닝부터 보여 준다. 덧문 열기·첫 손님·튜토리얼은 오프닝 마지막 대사를 넘긴 뒤(openingNext).
+   */
   const newGame = useCallback(() => {
     clearSave();
     setLoadIssue(null);
     setMigratedFrom(null);
+    setShutterFx(null);
     dispatch({ type: "RESET" });
     dispatch({ type: "START", seed: newSeed(), tutorial: true });
+    setShowTitle(false);
+  }, []);
+
+  /** 오프닝 대사 넘기기. 마지막 대사를 넘기면 창구로 바뀌며 기존 덧문 열기 연출 → 첫 손님 → 튜토리얼 */
+  const openingNext = useCallback((fromLine: number) => {
+    dispatch({ type: "OPENING_NEXT", fromLine });
+    if (fromLine >= OPENING_LINES.length - 1) {
+      setShutterFx("opening");
+      playSfx("shutterOpen");
+    }
+  }, []);
+
+  /** 영업 중단 → 복구 지점(전날 또는 그날 영업 시작)으로. 창구에서 덧문을 다시 연다 */
+  const restoreDay = useCallback((dayNumber: number) => {
+    setShopOpen(false);
+    setPreview(null);
+    dispatch({ type: "RESTORE_CHECKPOINT", dayNumber });
     setShutterFx("opening");
     playSfx("shutterOpen");
-    setShowTitle(false);
   }, []);
 
   const applyImport = useCallback((next: GameState) => {
@@ -166,7 +188,11 @@ export default function App() {
 
   const day = state.day;
   const order = currentOrder(state);
-  const inGame = !showTitle && state.scene !== "title" && day !== null && order !== null;
+  const openingOn = !showTitle && day !== null && state.opening !== null && !state.opening.done;
+  const inGame = !showTitle && !openingOn && state.scene !== "title" && day !== null && order !== null;
+  // 접속할 때 이미 중단 상태였으면 바로, 이번에 전달하며 중단됐으면 손님 반응을 먼저 보여 주고 나타낸다
+  const bootOver = bootInfo.state.gameOver;
+  const overDelayed = !!state.gameOver && !(bootOver && bootOver.orderId === state.gameOver.orderId && bootOver.money === state.gameOver.money);
   const overlayOpen = shopOpen || preview !== null;
 
   const hud: HudProps | undefined = inGame
@@ -185,7 +211,7 @@ export default function App() {
       }
     : undefined;
 
-  const tutorialOn = inGame && state.tutorial?.status === "active" && day.dayNumber === 1;
+  const tutorialOn = inGame && !state.gameOver && state.tutorial?.status === "active" && day.dayNumber === 1;
 
   return (
     <div className="app">
@@ -195,7 +221,7 @@ export default function App() {
         </main>
       ) : (
         <Stage>
-          {!inGame && (
+          {!inGame && !openingOn && (
             <TitleScreen
               state={state}
               loadIssue={loadIssue}
@@ -207,8 +233,10 @@ export default function App() {
               sound={<SoundSettings value={sound} onChange={changeSound} light />}
             />
           )}
+          {openingOn && state.opening && <OpeningScene line={state.opening.line} onNext={openingNext} />}
           {inGame && state.scene === "counter" && (
             <CounterScene
+              halted={state.gameOver !== null}
               day={day}
               order={order}
               dispatch={dispatch}
@@ -277,6 +305,9 @@ export default function App() {
           {/* 첫 주문 튜토리얼 안내 (실제 행동을 해야 다음으로) */}
           {tutorialOn && !shutterFx && !overlayOpen && (
             <TutorialGuide state={state} onSkip={() => dispatch({ type: "TUTORIAL_SKIP" })} />
+          )}
+          {inGame && state.gameOver && (
+            <GameOverScreen state={state} delayed={overDelayed} onRestore={restoreDay} onTitle={goTitle} />
           )}
           {inGame && tutorialDone && (
             <p className="tutorial-done" role="status" data-testid="tutorial-done">첫 주문 완성! 이제 다음 손님도 같은 순서로 만들어 보세요.</p>

@@ -4,6 +4,7 @@
  * 창구·마감 화면은 장면 그림 안 위쪽 가장자리(그림 위 여백이 넉넉하면 여백)에, 제작대는 기존 제작대 머리줄 안에 놓는다.
  * 반투명한 어두운 나무 바탕 + 황동 테두리. 버튼은 최소 40px.
  */
+import { fmtMoney } from "../lib/money.ts";
 import type { CSSProperties } from "react";
 import type { SceneLayout } from "./art/ShopScene.tsx";
 import type { SoundSettings } from "../audio/settings.ts";
@@ -55,9 +56,9 @@ export function HudSound({ sound, onSound }: Pick<HudProps, "sound" | "onSound">
 
 export function HudMoney({ money }: Pick<HudProps, "money">) {
   return (
-    <div className="hud-chip hud-money" data-testid="money" aria-label={`달빛 동전 ${money}개`}>
+    <div className="hud-chip hud-money" data-testid="money" aria-label={`달빛 동전 ${fmtMoney(money)}개`}>
       <Icon name="coin" size={20} />
-      <span data-testid="money-value">{money}</span>
+      <span data-testid="money-value" className={money < 0 ? "is-negative" : undefined}>{fmtMoney(money)}</span>
     </div>
   );
 }

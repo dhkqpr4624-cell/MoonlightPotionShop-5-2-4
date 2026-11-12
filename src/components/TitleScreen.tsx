@@ -13,6 +13,7 @@ import { downloadText } from "../lib/download.ts";
 import { currentOrder } from "../game/reducer.ts";
 import type { GameState } from "../game/types.ts";
 import { DataMenu } from "./DataMenu.tsx";
+import { fmtMoney } from "../lib/money.ts";
 
 export const TITLE_IMAGE = "assets/ui/title-night.png";
 
@@ -25,16 +26,18 @@ export interface LoadIssue {
 function statusText(state: GameState): string | null {
   const day = state.day;
   if (!day) return null;
-  if (day.status === "closed") return `밤 ${day.dayNumber}일차 영업 마감 · 달빛 동전 ${state.money}개`;
+  if (state.gameOver) return `밤 ${day.dayNumber}일차 · 영업 중단 · 달빛 동전 ${fmtMoney(state.money)}개`;
+  if (state.opening && !state.opening.done) return `새 가게 오프닝 (${state.opening.line + 1}/3)`;
+  if (day.status === "closed") return `밤 ${day.dayNumber}일차 영업 마감 · 달빛 동전 ${fmtMoney(state.money)}개`;
   const o = currentOrder(state);
   const step =
     o?.status === "brewing" ? "포션 만드는 중" : o?.status === "bottled" ? "포션 전달 전" : o?.status === "paid" ? "판매 완료" : "주문 대기";
-  return `밤 ${day.dayNumber}일차 · 손님 ${day.currentIndex + 1}/${day.orders.length} · ${step} · 달빛 동전 ${state.money}개`;
+  return `밤 ${day.dayNumber}일차 · 손님 ${day.currentIndex + 1}/${day.orders.length} · ${step} · 달빛 동전 ${fmtMoney(state.money)}개`;
 }
 
 /** 지울 진행이 있는지 (새로 시작하기 확인 여부) */
 export function hasProgress(state: GameState): boolean {
-  return state.day !== null || state.money > 0 || state.problemLog.length + state.legacyRecords.length > 0 || state.shop.owned.length > 0;
+  return state.day !== null || state.money !== 0 || state.problemLog.length + state.legacyRecords.length > 0 || state.shop.owned.length > 0;
 }
 
 export function TitleScreen({

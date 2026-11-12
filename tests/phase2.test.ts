@@ -84,7 +84,7 @@ test("Phase 1 저장 → v2 → v3 마이그레이션: 진행 중 주문은 Phas
   const s = l.state;
   assert.equal(l.migratedFrom, 1);
   assert.equal(store.mem.get(`${BACKUP_KEY_PREFIX}v1`), raw);
-  assert.equal(s.saveVersion, 8);
+  assert.equal(s.saveVersion, 9);
   assert.deepEqual(s.unlockedIngredients, ["energyHerb"]);
   assert.equal(s.money, v1.money);
   assert.equal(s.legacyRecords.length, v1.records.length);
@@ -105,7 +105,7 @@ test("손상·미지원 저장은 덮어쓰지 않음", () => {
   const a = loadGame(1, store);
   assert.equal(a.kind, "error");
   assert.equal(store.mem.get(SAVE_KEY), "{망가진 데이터");
-  store.setItem(SAVE_KEY, JSON.stringify({ ...createInitialState(), saveVersion: 9 }));
+  store.setItem(SAVE_KEY, JSON.stringify({ ...createInitialState(), saveVersion: 10 }));
   const b = loadGame(1, store);
   assert.ok(b.kind === "error" && b.reason === "unsupportedVersion");
 });
@@ -117,7 +117,7 @@ test("내보내기 → 가져오기 왕복, 잘못된 파일 거부", () => {
   assert.ok(imp.ok);
   if (imp.ok) assert.deepEqual({ ...imp.state, scene: s.scene }, s);
   const bad: [string, (g: GameState) => void][] = [
-    ["음수 소지금", (g) => { g.money = -1; }],
+    ["소수 소지금", (g) => { g.money = 1.5; }],
     ["손님 순서", (g) => { g.day!.currentIndex = 7; }],
     ["주문 4건", (g) => { g.day!.orders.pop(); }],
     ["지급 기록 누락", (g) => { g.paidOrderIds = []; }],

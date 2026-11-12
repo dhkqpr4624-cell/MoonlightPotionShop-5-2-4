@@ -122,15 +122,16 @@ test("기력 포션 생활 소재·비교 주문: 기력초 한 과제, 다른 �
   assert.match(solutionSteps(shift, shift.tasks[0]).at(-1)!, /0\.72g/);
 });
 
-test("한 재료 주문 판매금: 정답 100%, 오답 60% (80% 없음), 힌트·'네?'는 감액 없음", () => {
-  for (const [wrong, q, pct] of [[[], "great", 100], [[0], "poor", 60]] as const) {
+test("한 재료 주문 정산: 정답이면 정상 판매금, 오답이면 판매금 0·보상금(정상가 ÷ 3 반올림), 힌트·'네?'는 영향 없음", () => {
+  for (const [wrong, q] of [[[], "great"], [[0], "poor"]] as const) {
     let s = run(createInitialState(), { type: "START", seed: 52 });
     s = run(s, { type: "ASK_AGAIN", orderId: order(s).id });
     const price = order(s).price;
     s = serveCurrent(s, { wrong: [...wrong], hint: true });
     assert.equal(order(s).quality, q);
-    assert.equal(order(s).reward, Math.floor((price * pct) / 100));
-    assert.equal(s.money, order(s).reward);
+    assert.equal(order(s).reward, q === "great" ? price : 0);
+    assert.equal(order(s).penalty, q === "great" ? 0 : Math.round(price / 3));
+    assert.equal(s.money, q === "great" ? price : -Math.round(price / 3));
   }
 });
 
@@ -230,7 +231,7 @@ test("리듀서 UNLOCK_INGREDIENT: 실제 데이터로만, 이미 해금이면 �
 
 test("저장: 해금 목록 검사 (기력초 빠짐·없는 재료·중복은 거부), 저장 → 복구 같음", () => {
   const s = run(createInitialState(), { type: "START", seed: 3 });
-  assert.equal(s.saveVersion, 8);
+  assert.equal(s.saveVersion, 9);
   const r = validateState(roundTrip(s));
   assert.ok(r.ok);
   if (r.ok) assert.deepEqual(r.state, s);
@@ -270,7 +271,7 @@ test("3단계 저장(v3, 실제 3단계 코드로 만든 젓는 중 저장) → 
   const s = l.state;
   assert.equal(l.migratedFrom, 3);
   assert.equal(store.mem.get("moonlight-potion-shop/backup-v3"), raw, "원본 백업");
-  assert.equal(s.saveVersion, 8);
+  assert.equal(s.saveVersion, 9);
   assert.deepEqual(s.unlockedIngredients, ["energyHerb"]);
   assert.equal(s.money, v3.money);
   assert.deepEqual(s.day!.orders, v3.day.orders, "진행 중인 하루의 주문 그대로");

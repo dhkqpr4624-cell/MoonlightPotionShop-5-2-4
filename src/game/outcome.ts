@@ -1,5 +1,14 @@
 /**
- * 포션 품질과 판매금. 주문의 재료 과제 수와 정확한 과제 수로 정한다.
+ * 포션 품질과 판매금·피해 보상금.
+ *
+ * 저장 버전 9부터의 정산 규칙 (settleOrder)
+ *   모든 재료를 정확히 계량(품질 great) → 정상 판매금 전액
+ *   재료를 하나라도 잘못 계량(good·okay·poor) → 판매금 0, 손님에게 피해 보상금 = 정상 판매가 총액 ÷ 3 (일반 반올림, 주문당 한 번)
+ *   Phase 2 규칙 주문(품질 없음) → 정상 판매금 전액
+ * 힌트 사용·숫자 형식 오류는 품질에 영향이 없다. 돈은 창구에서 전달할 때 한 번만 움직인다(reducer DELIVER).
+ *
+ * 아래 품질별 비율(rewardForOrder)은 버전 8 이전에 이미 정산된 주문을 검사·표시할 때만 쓴다.
+ * 주문의 재료 과제 수와 정확한 과제 수로 정한다.
  *  재료 1·2개 (기존 규칙 그대로)
  *    모든 과제 정확:   만족(great) 100%
  *    일부만 정확:      조금 아쉬움(okay) 80%   ← 과제가 2개일 때만 생긴다
@@ -43,6 +52,22 @@ export function rewardFor(price: number, quality: Quality | null, taskCount = 2)
 /** 주문의 실제 판매금 (재료 수에 맞는 비율) */
 export function rewardForOrder(order: Order, quality: Quality | null): number {
   return rewardFor(order.price, quality, order.tasks.length);
+}
+
+/** 피해 보상금: 정상 판매가 총액 ÷ 3, 소수 부분은 일반 반올림 (병 수·틀린 재료 수를 다시 곱하지 않음) */
+export function penaltyFor(price: number): number {
+  return Math.round(price / 3);
+}
+
+/** 잘못 만든 포션인지 (기존 품질 판정 재사용: 필수 재료 중 하나라도 틀리면 great가 아님) */
+export function isWrongPotion(quality: Quality | null): boolean {
+  return quality !== null && quality !== "great";
+}
+
+/** 버전 9 정산: 판매금과 피해 보상금 */
+export function settleOrder(order: Order, quality: Quality | null): { reward: number; penalty: number } {
+  if (isWrongPotion(quality)) return { reward: 0, penalty: penaltyFor(order.price) };
+  return { reward: rewardForOrder(order, quality), penalty: 0 };
 }
 
 /** 손님 반응 대사 (주문 번호로 고르므로 다시 계산해도 같다) */

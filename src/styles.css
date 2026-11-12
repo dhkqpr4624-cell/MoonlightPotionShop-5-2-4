@@ -244,6 +244,10 @@ html, body { overflow: hidden; }
 .q-great { background: #d8f5e7; color: var(--good-ink); }
 .q-okay { background: #fff1c9; color: #7a5500; }
 .q-poor { background: #f0e6ff; color: #5a3f8a; }
+.penalty-text { color: #ffb3a8 !important; white-space: nowrap; }
+.halted-text { margin: 0; padding: 8px 14px; border-radius: 12px; background: rgba(120, 30, 30, 0.75); color: #fff; font-weight: 800; }
+.is-negative { color: #ff9b8f; }
+.coin-pop--minus { color: #ffb3a8; font-size: 2rem; right: auto; left: 50%; top: 56%; margin-left: -120px; z-index: 7; white-space: nowrap; }
 .coin-pop {
   position: absolute; right: 14%; top: 26%; z-index: 4; display: flex; align-items: center; gap: 6px;
   font-size: 2.2rem; font-weight: 900; color: var(--lamp); text-shadow: 0 3px 0 var(--ink); animation: coin 1.6s ease-out forwards; pointer-events: none;
@@ -316,9 +320,17 @@ html, body { overflow: hidden; }
 .scene-table { z-index: 4; }
 .npc { position: absolute; }
 .npc-body { position: relative; width: 100%; height: 100%; }
-.npc-img { display: block; width: 100%; height: 100%; -webkit-user-drag: none; transform-origin: 50% 90%; animation: npc-breathe 4.2s ease-in-out infinite; }
-/* 호흡: 그림 전체를 같은 비율로 아주 조금만 (찌그러뜨리지 않음) */
-@keyframes npc-breathe { 50% { transform: translateY(-2px) scale(1.005); } }
+.npc-img { display: block; width: 100%; height: 100%; -webkit-user-drag: none; transform-origin: 50% 88%; animation: npc-breathe 6.4s ease-in-out infinite; }
+/*
+ * 대기 중 움직임: 3.2초마다 한 번 숨쉬며(조금 위로·같은 비율로 살짝 커짐) 좌우로 번갈아 아주 조금 기운다.
+ * 아랫부분(카운터 윗면 아래 약 77px)은 테이블에 가려 있어 4px 올라가도 떠 보이지 않고,
+ * 귀 끝 여유는 손님 크기를 정할 때 NPC_MOTION_HEADROOM만큼 미리 남겨 둔다(ShopScene.tsx).
+ */
+@keyframes npc-breathe {
+  0%, 50%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+  25% { transform: translateY(-4px) rotate(0.7deg) scale(1.008); }
+  75% { transform: translateY(-4px) rotate(-0.7deg) scale(1.008); }
+}
 .npc-fallback { position: absolute; left: 22%; width: 56%; }
 .npc-fallback svg { width: 100%; height: auto; display: block; }
 .npc--here { animation: npc-enter 0.6s ease-out both; }
@@ -869,3 +881,48 @@ html, body { overflow: hidden; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; animation-delay: 0ms !important; transition-duration: 0.01ms !important; }
   .npc-lids { transform: scaleY(0) !important; }
 }
+
+/* ---------- 새 게임 오프닝 ---------- */
+.opening-wrap { position: relative; flex: 1; overflow: hidden; background: #0f1030; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.opening-art {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; pointer-events: none;
+  /* 상점 문·진열창 쪽(가로 48%, 세로 58%)을 중심으로 1.00 → 1.12배 확대하고 그 크기에서 멈춘다 */
+  transform-origin: 48% 58%; transform: scale(1); transition: transform 5.5s cubic-bezier(0.33, 0.1, 0.25, 1);
+}
+.opening-wrap.is-zoomed .opening-art { transform: scale(1.12); }
+.opening-wrap.is-instant .opening-art { transition: none; }
+.opening-shade { position: absolute; left: 0; right: 0; bottom: 0; height: 46%; background: linear-gradient(transparent, rgba(8, 6, 26, 0.6)); pointer-events: none; }
+.opening-dialog {
+  position: absolute; left: 50%; bottom: 26px; width: 820px; margin-left: -410px; min-height: 150px; z-index: 2; cursor: default;
+  background: linear-gradient(#fff8ea, #f6ead0); border: 4px solid var(--wood-3); border-radius: 22px; padding: 18px 26px 16px;
+  box-shadow: 0 0 0 3px var(--brass) inset, 0 10px 30px rgba(0, 0, 0, 0.45); animation: opening-dialog-in 0.6s ease-out 0.35s both;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.opening-wrap.is-instant .opening-dialog { animation: none; }
+@keyframes opening-dialog-in { from { opacity: 0; transform: translateY(18px); } }
+.opening-name { display: flex; align-items: center; gap: 8px; font-weight: 800; color: var(--ink-soft); font-size: 0.95rem; }
+.opening-line { margin: 0; font-size: 1.5rem; line-height: 1.5; font-weight: 800; color: var(--ink); min-height: 2.2em; }
+.opening-line-text { animation: opening-line-in 0.35s ease-out both; display: inline-block; }
+@keyframes opening-line-in { from { opacity: 0; transform: translateY(6px); } }
+.opening-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.opening-count { font-size: 0.9rem; font-weight: 800; color: var(--ink-soft); }
+.opening-next { min-width: 150px; }
+
+/* ---------- 영업 중단(게임 오버) ---------- */
+.gameover-backdrop {
+  position: absolute; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at 50% 30%, rgba(40, 34, 94, 0.82), rgba(8, 6, 26, 0.94) 70%);
+}
+.gameover-backdrop.is-delayed { animation: gameover-in 0.7s ease-out 1.6s both; }
+@keyframes gameover-in { from { opacity: 0; visibility: hidden; } to { opacity: 1; visibility: visible; } }
+.gameover-card {
+  width: 560px; max-width: calc(100% - 32px); text-align: center; color: #fff3d9; padding: 28px 32px 26px; border-radius: 24px;
+  background: linear-gradient(#2a2160, #17123c); border: 3px solid var(--brass); box-shadow: 0 0 40px rgba(255, 207, 107, 0.18), 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+.gameover-moon { color: var(--lamp); filter: drop-shadow(0 0 12px rgba(255, 207, 107, 0.5)); }
+.gameover-title { margin: 6px 0 8px; font-size: 2rem; letter-spacing: 0.08em; color: var(--lamp); }
+.gameover-reason { margin: 0 0 14px; font-size: 1.1rem; font-weight: 700; line-height: 1.5; }
+.gameover-money { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 16px; padding: 6px 16px; border-radius: 999px; background: rgba(120, 30, 30, 0.6); font-size: 1.25rem; font-weight: 900; color: #ffd0c8; }
+.gameover-note { margin: 0 0 18px; font-size: 0.95rem; line-height: 1.55; color: #e7dcff; }
+.gameover-actions { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.gameover-actions .btn { min-width: 300px; }

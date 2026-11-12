@@ -6,6 +6,7 @@
  * 결과는 네 가지만: 오늘 수입(이번 영업 판매금 합, 재료 구매로 줄지 않음) · 응대한 손님 · 현재 소지금(지금 쓸 수 있는 잔액)
  * · 잘못 만든 포션(틀린 재료가 있는 주문의 병 수 합). 다른 학습 통계는 화면에서 빼고 영업 기록·JSON에는 그대로 남긴다.
  */
+import { fmtMoney } from "../lib/money.ts";
 import { useEffect, useRef } from "react";
 import { summarizeDay, wrongPotionCount } from "../game/daySummary.ts";
 import type { DayState, GameState } from "../game/types.ts";
@@ -53,7 +54,7 @@ export function ClosingScene({
   const tiles: [string, string, string][] = [
     ["오늘 수입", `${summary.moneyEarned}`, "earned"],
     ["응대한 손님", `${summary.customersServed}명`, "customers"],
-    ["현재 소지금", `${state.money}`, "money"],
+    ["현재 소지금", fmtMoney(state.money), "money"],
     ["잘못 만든 포션", `${wrong}병`, "wrong-potions"],
   ];
 

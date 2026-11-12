@@ -56,8 +56,8 @@ test("3B 오답: 입력값 유지·확정, 그 양으로 투입, 해설은 실�
   assert.equal(s.review.length, 1, "오답은 복습 후보");
 });
 
-test("3B 품질별 판매금 100%·80%·60% (이전 레시피 2재료 주문, 정수, 소수 버림), 힌트·'네?'는 감액 없음", () => {
-  for (const [wrong, q, pct] of [[[], "great", 100], [[1], "okay", 80], [[0, 1], "poor", 60]] as const) {
+test("3B 정산(이전 레시피 2재료 주문): 모두 정답 → 정상 판매금, 하나라도 오답 → 판매금 0·보상금 한 번, 힌트·'네?'는 영향 없음 / 이전 감액 규칙 함수는 그대로", () => {
+  for (const [wrong, q] of [[[], "great"], [[1], "okay"], [[0, 1], "poor"]] as const) {
     let s = run(createInitialState(), { type: "START", seed: 50 });
     const first = order(s);
     const legacy = { ...createOrderFromKey("multiBottle:starlight:3", { orderNumber: 1, customerId: first.customerId, rng: createRng(1), recipes: [RECIPES.starlight] }), status: "arrived" as const };
@@ -66,8 +66,10 @@ test("3B 품질별 판매금 100%·80%·60% (이전 레시피 2재료 주문, �
     const price = order(s).price;
     s = serveCurrent(s, { wrong: [...wrong], hint: true });
     assert.equal(order(s).quality, q);
-    assert.equal(order(s).reward, Math.floor((price * pct) / 100));
-    assert.equal(s.money, Math.floor((price * pct) / 100));
+    const pen = q === "great" ? 0 : Math.round(price / 3);
+    assert.equal(order(s).reward, q === "great" ? price : 0);
+    assert.equal(order(s).penalty, pen, "틀린 재료 수와 무관하게 주문당 한 번");
+    assert.equal(s.money, (q === "great" ? price : 0) - pen);
     assert.ok(Number.isInteger(s.money));
   }
   assert.equal(rewardFor(15, "okay"), 12);
@@ -167,7 +169,8 @@ test("3C 비교(⑦) 주문: 선택형 개념 문제, 결과 후 양은 자동 �
   for (let k = 0; k < 4; k++) s = reducer(s, { type: "STIR", orderId: o.id, amount: 25 });
   s = reducer(s, { type: "COMPLETE_POTION", orderId: o.id });
   assert.equal(order(s).quality, "okay");
-  assert.equal(order(s).reward, 16);
+  assert.equal(order(s).reward, 0, "개념 문제 오답도 잘못 만든 포션");
+  assert.equal(order(s).penalty, Math.round(order(s).price / 3));
 });
 
 test("3C 하루 구성: 특별 주문 제한·첫 손님 일반·일반 주문 2건 이상 (12일)", () => {
@@ -191,7 +194,8 @@ test("3C 하루 구성: 특별 주문 제한·첫 손님 일반·일반 주문 2
 /* ------------------------------ 3D ------------------------------ */
 
 test("3D 유형 자동 소개: 영업을 마칠 때마다 ①② → ③④ → ⑤⑥ → ⑦, 새 유형은 그날 등장", () => {
-  let s = run(createInitialState(), { type: "START", seed: 5 });
+  // 전부 틀려도(보상금으로 영업 중단되지 않게 넉넉한 소지금에서) 다음 단계로
+  let s = run({ ...createInitialState(), money: 1000 }, { type: "START", seed: 5 });
   const expected = [["d1xN", "d2xN"], ["Nxd1", "Nxd2"], ["d1xD", "d2xD"], ["shift"], []];
   for (let d = 0; d < 5; d++) {
     assert.deepEqual(s.day!.newTypes, expected[d], `day ${d + 1}`);
@@ -376,7 +380,7 @@ test("가져오기: Phase 2 파일도 옮겨서 가져오고, 참조가 깨진 P
     ["오답을 정답으로 조작", (g) => { const t = g.day!.orders[0].tasks.find((x) => x.correct === false)!; t.correct = true; }],
     ["투입량 조작", (g) => { const t = g.day!.orders[0].tasks.find((x) => x.correct === false)!; t.addedAmount = t.problem.answer; }],
     ["젓기 전 완성", (g) => { g.day!.orders[1].stirProgress = 50; }],
-    ["지정량 레시피 조작", (g) => { const o = g.day!.orders.find((x: Order) => x.tasks.some((t) => t.mode === "specified")); if (o) o.tasks.find((t) => t.mode === "specified")!.problem.answer = "9"; else g.money = -1; }],
+    ["지정량 레시피 조작", (g) => { const o = g.day!.orders.find((x: Order) => x.tasks.some((t) => t.mode === "specified")); if (o) o.tasks.find((t) => t.mode === "specified")!.problem.answer = "9"; else g.money = 1.5; }],
     ["중복 문제 기록", (g) => { g.problemLog.push(g.problemLog[0]); }],
   ];
   for (const [name, mut] of breakers) {

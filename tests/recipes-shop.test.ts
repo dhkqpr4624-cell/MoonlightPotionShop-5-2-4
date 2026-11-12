@@ -191,10 +191,11 @@ test("3재료 제조: 셋 다 넣기 전엔 젓기·병 담기 불가, 다 넣�
   for (let k = 0; k < 4; k++) s = reducer(s, { type: "STIR", orderId: o.id, amount: 25 });
   s = run(s, { type: "COMPLETE_POTION", orderId: o.id }, { type: "COMPLETE_POTION", orderId: o.id });
   assert.equal(order(s).quality, "good");
-  assert.equal(order(s).reward, 18, "21 × 90% = 18.9 → 18 (버림)");
+  assert.equal(order(s).reward, 0, "하나라도 틀리면 판매금 0");
+  assert.equal(order(s).penalty, 7, "정상가 21 ÷ 3 = 7");
   const m0 = s.money;
   s = run(s, { type: "GO_COUNTER" }, { type: "DELIVER", orderId: o.id, now: NOW }, { type: "DELIVER", orderId: o.id, now: NOW });
-  assert.equal(s.money, m0 + 18, "판매금은 한 번만");
+  assert.equal(s.money, m0 - 7, "보상금은 한 번만");
 });
 
 test("재료 구매 → 레시피 해금 안내 → 오늘 주문은 그대로, 다음 날 새 레시피 주문 1건 이상", () => {
@@ -279,7 +280,7 @@ test("v5 저장(실제 직전 버전 코드로 만든 3일차 계량 중) → v6
   const s = l.state;
   assert.equal(l.migratedFrom, 5);
   assert.equal(store.mem.get("moonlight-potion-shop/backup-v5"), raw, "원본 백업");
-  assert.equal(s.saveVersion, 8);
+  assert.equal(s.saveVersion, 9);
   for (const k of ["scene", "money", "unlockedIngredients", "day", "draftAnswer", "activeTask", "problemLog", "review", "paidOrderIds", "dayHistory", "decks", "recipeNotices"]) {
     assert.deepEqual((s as unknown as Record<string, unknown>)[k], v5[k], k);
   }
@@ -295,14 +296,17 @@ test("v5 저장(실제 직전 버전 코드로 만든 3일차 계량 중) → v6
   assert.equal(t.paidOrderIds.length, v5.paidOrderIds.length + 5);
 });
 
-test("30일 균형: 보통 플레이 28~32일에 새 레시피 모두 해금, 오답이 많거나 장식을 먼저 사도 진행 가능", () => {
+test("균형(보상금 규칙): 모두 정답이면 약 30일에 새 레시피 모두 해금(이전과 같음), 보통 플레이도 새 레시피가 열림 — 전체 해금은 늦어짐(보고서 참고)", () => {
   const med = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
-  const allDay = (p: number, first: string[] = []) => med(Array.from({ length: 40 }, (_, i) => Math.max(...NEW.map((id) => simulate(p, i + 1, 45, [...first]).unlockDay[id] ?? 99))));
-  const mixed = allDay(0.75);
-  assert.ok(mixed >= 28 && mixed <= 32, `섞임 ${mixed}일`);
-  const perfect = allDay(1);
-  assert.ok(perfect >= 24 && perfect <= mixed, `모두 정답 ${perfect}일`);
-  assert.ok(allDay(0.35) <= 42, "오답이 많아도 6주 안");
-  assert.ok(allDay(0.75, DECOR_FIRST) <= 42, "상점 상품을 먼저 사도 진행 가능");
+  const runs = (p: number, first: string[] = []) => Array.from({ length: 40 }, (_, i) => simulate(p, i + 1, 45, [...first]));
+  const allDay = (rs: ReturnType<typeof runs>) => med(rs.map((r) => Math.max(...NEW.map((id) => r.unlockDay[id] ?? 99))));
+  const firstDay = (rs: ReturnType<typeof runs>) => med(rs.map((r) => Math.min(...NEW.map((id) => r.unlockDay[id] ?? 99))));
+  const perfect = allDay(runs(1));
+  assert.ok(perfect >= 24 && perfect <= 32, `모두 정답 ${perfect}일`);
+  const mixed = runs(0.75);
+  assert.ok(firstDay(mixed) <= 10, `섞임: 첫 새 레시피 ${firstDay(mixed)}일`);
+  const countBy30 = med(mixed.map((r) => NEW.filter((id) => (r.unlockDay[id] ?? 99) <= 30).length));
+  assert.ok(countBy30 >= 4, `섞임: 30일까지 새 레시피 ${countBy30}종`);
+  assert.ok(firstDay(runs(0.75, DECOR_FIRST)) <= 15, "상점 상품을 먼저 사도 새 레시피가 열림");
   assert.ok(typeof report === "function");
 });

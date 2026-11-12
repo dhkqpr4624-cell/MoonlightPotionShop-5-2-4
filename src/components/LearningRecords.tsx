@@ -135,7 +135,7 @@ export function LearningRecords({ state, onBack }: { state: GameState; onBack: (
             <div className="table-wrap">
               <table className="data-table" data-testid="order-table">
                 <thead>
-                  <tr><th>일차·손님</th><th>주문</th><th>손님 반응</th><th>정상 판매금</th><th>받은 돈</th></tr>
+                  <tr><th>일차·손님</th><th>주문</th><th>손님 반응</th><th>정상 판매금</th><th>받은 돈</th><th>보상금</th></tr>
                 </thead>
                 <tbody>
                   {orders.map((o) => (
@@ -145,6 +145,7 @@ export function LearningRecords({ state, onBack }: { state: GameState; onBack: (
                       <td>{o.qualityLabel}</td>
                       <td>{o.price}</td>
                       <td>{o.reward}</td>
+                      <td>{o.penalty ? `−${o.penalty}` : "—"}</td>
                     </tr>
                   ))}
                 </tbody>

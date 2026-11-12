@@ -187,6 +187,11 @@ export interface Order {
   /** 병에 담을 때 확정되는 품질과 실제 지급액 */
   quality: Quality | null;
   reward: number | null;
+  /**
+   * 잘못 만든 포션의 피해 보상금(양수, 전달할 때 소지금에서 뺀다). 저장 버전 9부터 병에 담을 때 판매금과 함께 확정한다.
+   * 없음(undefined)은 버전 8 이전 규칙으로 이미 정산된 주문(품질별 감액)이라 다시 계산하지 않는다.
+   */
+  penalty?: number;
   /** 젓기 진행 (0 ~ STIR_TARGET) */
   stirProgress: number;
   /** '네?'를 누른 횟수 (보상과 무관, 기록용) */
@@ -285,6 +290,8 @@ export interface OrderOutcome {
   quality: Quality | null;
   price: number;
   reward: number;
+  /** 피해 보상금 (저장 버전 9부터. 없으면 0) */
+  penalty?: number;
   deliveredAt: string;
 }
 
@@ -373,8 +380,34 @@ export interface TutorialState {
   status: "active" | "done" | "skipped";
 }
 
+/** 새 게임 오프닝 (저장 버전 9부터). 새로 시작한 게임에만 생기고, 이전 저장에는 null */
+export interface OpeningState {
+  /** 지금 보고 있는 대사 번호 (0부터) */
+  line: number;
+  done: boolean;
+}
+
+/** 소지금이 이 값 이하가 되면 영업 중단(게임 오버) */
+export const GAME_OVER_MONEY = -50;
+
+/** 영업 중단 (저장 버전 9부터) */
+export interface GameOverState {
+  dayNumber: number;
+  /** 중단된 순간의 소지금 */
+  money: number;
+  /** 소지금을 −50 이하로 만든 주문 */
+  orderId: string;
+}
+
+/** 복구 지점: 영업일을 시작한 순간의 게임 상태 (복구 지점·영업 중단·오프닝 정보는 빼고 저장) */
+export type CheckpointState = Omit<GameState, "checkpoints" | "gameOver" | "opening">;
+export interface DayCheckpoint {
+  dayNumber: number;
+  state: CheckpointState;
+}
+
 export interface GameState {
-  saveVersion: 8;
+  saveVersion: 9;
   scene: Scene;
   money: number;
   nextOrderNumber: number;
@@ -404,4 +437,10 @@ export interface GameState {
   shop: ShopState;
   /** 첫 주문 튜토리얼. 이전 저장·튜토리얼 없이 시작한 게임은 null */
   tutorial: TutorialState | null;
+  /** 새 게임 오프닝. 이전 저장·완료 전 상태 */
+  opening: OpeningState | null;
+  /** 영업일 시작 복구 지점 (오늘·전날 최대 2개, 일차 오름차순) */
+  checkpoints: DayCheckpoint[];
+  /** 영업 중단 상태. 복구하기 전까지 다음 손님·다음 영업으로 넘어가지 않는다 */
+  gameOver: GameOverState | null;
 }

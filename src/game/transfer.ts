@@ -11,7 +11,7 @@ import type { GameState } from "./types.ts";
 
 export const SAVE_FILE_FORMAT = "moonlight-potion-shop/save";
 export const LEARNING_FILE_FORMAT = "moonlight-potion-shop/learning";
-export const MAX_IMPORT_BYTES = 2_000_000;
+export const MAX_IMPORT_BYTES = 6_000_000;
 
 export function buildSaveExport(state: GameState, now: string) {
   return {

@@ -17,12 +17,15 @@ import { equals, parseDecimal, toDecimalString } from "../lib/decimal.ts";
 import { createRng } from "../lib/rng.ts";
 import { correctFeedback, wrongFeedback } from "./feedback.ts";
 import { planDay } from "./orderFactory.ts";
-import { qualityOf, reactionLine, rewardForOrder } from "./outcome.ts";
+import { qualityOf, reactionLine, settleOrder } from "./outcome.ts";
 import { isLearningTask, summarizeDay } from "./daySummary.ts";
 import {
   CUSTOMERS_PER_DAY,
+  GAME_OVER_MONEY,
   STIR_TARGET,
   type AttemptRecord,
+  type CheckpointState,
+  type DayCheckpoint,
   type DayState,
   type GameState,
   type IngredientTask,
@@ -74,11 +77,22 @@ export type Action =
   /** 장식 장착 (가진 것만, 돈 들지 않음) */
   | { type: "EQUIP_DECOR"; slot: DecorSlot; theme: ThemeId }
   /** 편의품 켜기·끄기 */
-  | { type: "SET_GADGET"; id: GadgetId; on: boolean };
+  | { type: "SET_GADGET"; id: GadgetId; on: boolean }
+  /** 오프닝 대사 넘기기: 보고 있던 대사 번호를 함께 보내 한 번 누름에 한 대사만 넘어간다 */
+  | { type: "OPENING_NEXT"; fromLine: number }
+  /** 영업 중단 뒤 복구 지점(전날 또는 그날 영업 시작)으로 되돌리기 */
+  | { type: "RESTORE_CHECKPOINT"; dayNumber: number };
+
+/** 오프닝 대사 (문구 그대로) */
+export const OPENING_LINES = [
+  "드디어 열었어! 나만의 포션 상점이야!",
+  "포션의 달인이셨던 우리 할머니를 본받아서, 세계 최고의 포션을 만들겠어!",
+  "내 포션들로 손님들을 기쁘게 해 줘야지!",
+] as const;
 
 export function createInitialState(): GameState {
   return {
-    saveVersion: 8,
+    saveVersion: 9,
     scene: "title",
     money: 0,
     nextOrderNumber: 1,
@@ -100,6 +114,9 @@ export function createInitialState(): GameState {
     shop: defaultShop(),
     featuredRecipes: [],
     tutorial: null,
+    opening: null,
+    checkpoints: [],
+    gameOver: null,
   };
 }
 
@@ -132,11 +149,36 @@ export function hasAutoCauldron(state: Pick<GameState, "shop">): boolean {
   return state.shop.owned.includes("autoCauldron");
 }
 
-/** 주문을 병에 담은 완성 상태로: 품질·판매금을 이때 확정해 저장한다 (지급은 창구에서 전달할 때 한 번) */
+/**
+ * 주문을 병에 담은 완성 상태로: 품질·판매금·피해 보상금을 이때 확정해 저장한다.
+ * 돈은 여기서 움직이지 않고, 창구에서 전달할 때(DELIVER) 한 번만 지급·차감한다.
+ */
 function bottle(order: Order): Order {
   const quality = qualityOf(order);
-  const reward = rewardForOrder(order, quality);
-  return { ...order, status: "bottled", stirProgress: STIR_TARGET, quality, reward, script: { ...order.script, reaction: reactionLine(order, quality) } };
+  const { reward, penalty } = settleOrder(order, quality);
+  return { ...order, status: "bottled", stirProgress: STIR_TARGET, quality, reward, penalty, script: { ...order.script, reaction: reactionLine(order, quality) } };
+}
+
+/** 복구 지점으로 저장할 상태 (복구 지점·영업 중단·오프닝은 빼서 중첩·반복이 없게) */
+export function snapshotOf(state: GameState): CheckpointState {
+  const { checkpoints: _c, gameOver: _g, opening: _o, ...rest } = state;
+  return rest;
+}
+
+/** 오늘 영업 시작 상태를 복구 지점으로 넣고, 전날 것까지만 남긴다 */
+function withDayCheckpoint(state: GameState): GameState {
+  const d = (state.day as DayState).dayNumber;
+  const keep = state.checkpoints.filter((c) => c.dayNumber === d - 1);
+  return { ...state, checkpoints: [...keep, { dayNumber: d, state: snapshotOf(state) }] };
+}
+
+/**
+ * 영업 중단 때 돌아갈 복구 지점: 전날 영업 시작 → 없으면(1일차·업데이트 전 저장) 그날 영업 시작 → 둘 다 없으면 null
+ */
+export function restorePoint(state: Pick<GameState, "gameOver" | "checkpoints">): DayCheckpoint | null {
+  if (!state.gameOver) return null;
+  const n = state.gameOver.dayNumber;
+  return state.checkpoints.find((c) => c.dayNumber === n - 1) ?? state.checkpoints.find((c) => c.dayNumber === n) ?? null;
 }
 
 /**
@@ -174,6 +216,11 @@ function openDay(state: GameState, dayNumber: number, introStage: number, newTyp
     },
     scene: "counter",
   };
+}
+
+/** 새 영업일을 열고 그 시작 상태를 복구 지점으로 저장 */
+function openDayWithCheckpoint(...args: Parameters<typeof openDay>): GameState {
+  return withDayCheckpoint(openDay(...args));
 }
 
 function withOrder(state: GameState, order: Order): GameState {
@@ -267,7 +314,12 @@ function confirmSubmission(state: GameState, order: Order, index: number, submit
   return { ...next, draftAnswer: "", feedback: null, stats: { ...next.stats, problemsSolved: next.stats.problemsSolved + 1 } };
 }
 
+/** 영업 중단 중에도 받는 행동 */
+const ALLOWED_WHEN_OVER: Action["type"][] = ["GO_TITLE", "START", "RESTORE_CHECKPOINT"];
+
 export function reducer(state: GameState, action: Action): GameState {
+  // 영업 중단: 복구하기 전까지 손님·영업·구매 등 게임 진행을 받지 않는다
+  if (state.gameOver && !ALLOWED_WHEN_OVER.includes(action.type)) return state;
   const day = state.day;
   const order = currentOrder(state);
   const brewing = !!day && day.status === "open" && !!order && order.status === "brewing";
@@ -275,10 +327,15 @@ export function reducer(state: GameState, action: Action): GameState {
   switch (action.type) {
     case "START": {
       if (!day) {
-        const opened = openDay(state, 1, 0, INTRO_STAGES[0], action.seed, !!action.tutorial);
-        if (!action.tutorial) return opened;
+        if (!action.tutorial) return openDayWithCheckpoint(state, 1, 0, INTRO_STAGES[0], action.seed, false);
+        const opened = openDay(state, 1, 0, INTRO_STAGES[0], action.seed, true);
         const first = opened.day!.orders[0];
-        return { ...opened, tutorial: { orderId: first.id, orderViewed: false, recipeViewed: false, status: "active" } };
+        // 새 게임: 첫 주문 튜토리얼 + 오프닝(대사 0번부터). 복구 지점에는 튜토리얼 상태까지 넣는다
+        return withDayCheckpoint({
+          ...opened,
+          tutorial: { orderId: first.id, orderViewed: false, recipeViewed: false, status: "active" },
+          opening: { line: 0, done: false },
+        });
       }
       if (day.status === "closed") return { ...state, scene: "closing" };
       if (!order) return state;
@@ -464,18 +521,24 @@ export function reducer(state: GameState, action: Action): GameState {
       if (!day || day.status !== "open" || !order) return state;
       if (order.id !== action.orderId || order.status !== "bottled" || order.reward === null) return state;
       if (state.paidOrderIds.includes(order.id)) return state;
+      // 잘못 만든 포션은 판매금 0, 피해 보상금을 이 순간 한 번만 뺀다 (버전 8 이전에 정산된 주문은 penalty 없음 = 0)
+      const penalty = order.penalty ?? 0;
+      const money = state.money + order.reward - penalty;
       const paid = withOrder(state, { ...order, status: "paid" });
       const tu = state.tutorial;
       return {
         ...paid,
         tutorial: tu && tu.status === "active" && tu.orderId === order.id ? { ...tu, status: "done" } : tu,
+        // 오늘 수입에는 판매금만 더한다 (보상금은 소지금에만 반영)
         day: { ...(paid.day as DayState), moneyEarned: day.moneyEarned + order.reward },
-        money: state.money + order.reward,
+        money,
+        gameOver: money <= GAME_OVER_MONEY ? { dayNumber: day.dayNumber, money, orderId: order.id } : null,
         scene: "counter",
         paidOrderIds: [...state.paidOrderIds, order.id].slice(-50),
         orderLog: state.orderLog.some((x) => x.orderId === order.id) ? state.orderLog : [...state.orderLog, {
           orderId: order.id, dayNumber: day.dayNumber, customerNumber: day.currentIndex + 1, kind: order.kind, rules: order.rules,
           recipeId: order.recipeId, bottles: order.bottles, quality: order.quality, price: order.price, reward: order.reward,
+          ...(order.penalty !== undefined ? { penalty: order.penalty } : {}),
           deliveredAt: action.now,
         }],
         stats: {
@@ -507,7 +570,7 @@ export function reducer(state: GameState, action: Action): GameState {
       if (!day || day.status !== "closed" || day.dayNumber !== action.fromDay) return state;
       const stage = Math.min(MAX_INTRO_STAGE, day.introStage + 1);
       const newTypes = stage > day.introStage ? INTRO_STAGES[stage] : [];
-      return openDay(state, day.dayNumber + 1, stage, newTypes, action.seed);
+      return openDayWithCheckpoint(state, day.dayNumber + 1, stage, newTypes, action.seed);
     }
 
     case "UNLOCK_INGREDIENT": {
@@ -554,6 +617,31 @@ export function reducer(state: GameState, action: Action): GameState {
       const tu = state.tutorial;
       if (!tu || tu.status !== "active") return state;
       return { ...state, tutorial: { ...tu, status: "skipped" } };
+    }
+
+    case "OPENING_NEXT": {
+      const op = state.opening;
+      if (!op || op.done || op.line !== action.fromLine) return state;
+      return { ...state, opening: op.line >= OPENING_LINES.length - 1 ? { line: op.line, done: true } : { line: op.line + 1, done: false } };
+    }
+
+    case "RESTORE_CHECKPOINT": {
+      const cp = restorePoint(state);
+      if (!cp || cp.dayNumber !== action.dayNumber) return state;
+      // 복구 지점 이후의 판매·구매·보상금·기록·주문은 모두 그때 상태로 (중복 지급·집계 없음).
+      // 오프닝은 다시 보여 주지 않고, 이미 끝낸 튜토리얼은 다시 시작하지 않는다.
+      const cur = state.tutorial;
+      const cpTu = cp.state.tutorial;
+      const tutorial = cpTu && cpTu.status === "active" && cur && cur.status !== "active" ? { ...cpTu, status: cur.status } : cpTu;
+      return {
+        ...cp.state,
+        ...RESET_WORK,
+        scene: "counter",
+        tutorial,
+        opening: state.opening,
+        checkpoints: state.checkpoints.filter((c) => c.dayNumber <= cp.dayNumber),
+        gameOver: null,
+      };
     }
 
     case "ACK_RECIPE_NOTICE": {

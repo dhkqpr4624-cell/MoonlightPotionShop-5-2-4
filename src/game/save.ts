@@ -1,8 +1,8 @@
 /**
- * 저장·불러오기·검증·마이그레이션 (저장 버전 6).
+ * 저장·불러오기·검증·마이그레이션 (저장 버전 9).
  *
  * - localStorage 키 하나에 게임 상태 전체(JSON 하나)를 저장한다.
- * - 버전 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 순서로 자동으로 옮긴다. 옮기기 전 원본은 백업 키(backup-v○)에 보관.
+ * - 버전 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 순서로 자동으로 옮긴다. 옮기기 전 원본은 백업 키(backup-v○)에 보관.
  * - 손상되었거나 규칙·참조가 맞지 않거나 더 새로운 버전인 저장은 덮어쓰지 않고 오류로 돌려준다.
  */
 import { isAppearanceOf } from "../data/appearances.ts";
@@ -17,13 +17,14 @@ import { type DeckState } from "../lib/deck.ts";
 import { migrateV1toV2, validateV2State } from "./legacy/v2save.ts";
 import type * as V2 from "./legacy/v2types.ts";
 import { bankOrderPrice, bankScriptText, shiftConcept, SHIFT_VARIANTS } from "./orderFactory.ts";
-import { qualityOf, rewardForOrder } from "./outcome.ts";
+import { qualityOf, rewardForOrder, settleOrder } from "./outcome.ts";
 import { freeIngredients, isRecipeAvailable, normalizeUnlocked, shopIngredients } from "./unlocks.ts";
 import { DECOR_SLOTS, GADGETS, SHOP_ITEM_IDS, THEME_IDS, type ThemeId } from "../data/shop.ts";
 import { defaultShop } from "./shop.ts";
-import { autoCompleteIfReady, MAX_HINT_LEVEL } from "./reducer.ts";
+import { autoCompleteIfReady, MAX_HINT_LEVEL, OPENING_LINES, snapshotOf } from "./reducer.ts";
 import {
   CUSTOMERS_PER_DAY,
+  GAME_OVER_MONEY,
   STIR_TARGET,
   type DayState,
   type GameState,
@@ -34,7 +35,9 @@ import {
 
 export const SAVE_KEY = "moonlight-potion-shop/save";
 export const BACKUP_KEY_PREFIX = "moonlight-potion-shop/backup-";
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
+/** 소지금 하한 검사(음수 허용: 피해 보상금으로 −50 이하까지 내려갈 수 있다) */
+const MONEY_MIN = -1_000_000_000;
 
 export interface StorageLike {
   getItem(key: string): string | null;
@@ -239,9 +242,16 @@ export function validateOrder(o: unknown, where: string): string[] {
   if (o.status === "bottled" || o.status === "paid") {
     if (!allDone || o.stirProgress !== STIR_TARGET) e.push(`${where}: 재료 투입·젓기가 끝나지 않았는데 완성 상태입니다.`);
     const q = qualityOf(order);
-    if (o.quality !== q || o.reward !== rewardForOrder(order, q)) e.push(`${where}: 품질·판매금이 계량 결과와 맞지 않습니다.`);
+    if (o.quality !== q) e.push(`${where}: 품질이 계량 결과와 맞지 않습니다.`);
+    else if (o.penalty === undefined) {
+      // 버전 8 이전 규칙으로 이미 정산(전달)된 주문만: 품질별 감액 판매금 그대로 (다시 계산하지 않음)
+      if (o.status !== "paid" || o.reward !== rewardForOrder(order, q)) e.push(`${where}: 품질·판매금이 계량 결과와 맞지 않습니다.`);
+    } else {
+      const st = settleOrder(order, q);
+      if (o.reward !== st.reward || o.penalty !== st.penalty) e.push(`${where}: 판매금·보상금이 계량 결과와 맞지 않습니다.`);
+    }
     if (!isStr((sc as Obj).reaction)) e.push(`${where}: 손님 반응이 없습니다.`);
-  } else if (o.quality !== null || o.reward !== null) {
+  } else if (o.quality !== null || o.reward !== null || o.penalty !== undefined) {
     e.push(`${where}: 완성 전인데 품질·판매금이 있습니다.`);
   }
   if (o.quality !== null && !QUALITIES.includes(o.quality as string)) e.push(`${where}: 품질 값이 올바르지 않습니다.`);
@@ -333,12 +343,12 @@ function validateLegacyRecord(r: unknown, i: number): string[] {
   return ok ? [] : [`${w}: 필수 값이 빠졌거나 형식이 다릅니다.`];
 }
 
-/** 버전 8 저장 데이터 전체 검증 */
+/** 버전 9 저장 데이터 전체 검증 */
 export function validateState(data: unknown): { ok: true; state: GameState } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   if (!isObject(data)) return { ok: false, errors: ["저장 데이터가 객체 형식이 아닙니다."] };
   if (data.saveVersion !== SAVE_VERSION) return { ok: false, errors: [`저장 버전이 ${SAVE_VERSION}이 아닙니다.`] };
-  if (!isInt(data.money, 0)) errors.push("소지금이 올바르지 않습니다.");
+  if (!isInt(data.money, MONEY_MIN)) errors.push("소지금이 올바르지 않습니다.");
   if (!isInt(data.nextOrderNumber, 1)) errors.push("다음 주문 번호가 올바르지 않습니다.");
   if (!SCENES.includes(data.scene as string)) errors.push("화면 상태가 올바르지 않습니다.");
   if (!isObject(data.decks) || !Object.values(data.decks).every((d) => isObject(d) && isStrArray(d.remaining) && (d.lastDrawn === null || isStr(d.lastDrawn)))) {
@@ -384,7 +394,7 @@ export function validateState(data: unknown): { ok: true; state: GameState } | {
     data.orderLog.forEach((x, i) => {
       if (!isObject(x) || !isStr(x.orderId) || !isInt(x.dayNumber, 1) || !isInt(x.customerNumber, 1, CUSTOMERS_PER_DAY) ||
         !KINDS.includes(x.kind as string) || (x.rules !== 2 && x.rules !== 3) || !isStr(x.recipeId) || !isInt(x.bottles, 1) ||
-        !(x.quality === null || QUALITIES.includes(x.quality as string)) || !isInt(x.price, 0) || !isInt(x.reward, 0) || !isStr(x.deliveredAt)) {
+        !(x.quality === null || QUALITIES.includes(x.quality as string)) || !isInt(x.price, 0) || !isInt(x.reward, 0) || !(x.penalty === undefined || isInt(x.penalty, 0)) || !isStr(x.deliveredAt)) {
         errors.push(`주문 결과 기록 ${i + 1}: 형식이 올바르지 않습니다.`);
       }
     });
@@ -421,7 +431,7 @@ export function validateState(data: unknown): { ok: true; state: GameState } | {
   if (!Array.isArray(data.dayHistory)) errors.push("지난 영업 결과가 목록이 아닙니다.");
   else {
     data.dayHistory.forEach((h, i) => {
-      if (!isObject(h) || !SUMMARY_NUMBERS.every((k) => isInt(h[k], 0)) || !isStr(h.closedAt) ||
+      if (!isObject(h) || !SUMMARY_NUMBERS.every((k) => isInt(h[k], k === "moneyAfter" ? MONEY_MIN : 0)) || !isStr(h.closedAt) ||
         !["potionsMade", "wrongPotions"].every((k) => h[k] === undefined || isInt(h[k], 0))) {
         errors.push(`지난 영업 결과 ${i + 1}: 형식이 올바르지 않습니다.`);
       }
@@ -433,6 +443,36 @@ export function validateState(data: unknown): { ok: true; state: GameState } | {
   if (tu !== null) {
     if (!isObject(tu) || !isStr(tu.orderId) || !isBool(tu.orderViewed) || !isBool(tu.recipeViewed) || !["active", "done", "skipped"].includes(tu.status as string)) {
       errors.push("튜토리얼 정보가 올바르지 않습니다.");
+    }
+  }
+  // 오프닝 (버전 9)
+  const op = data.opening;
+  if (!(op === null || (isObject(op) && isInt(op.line, 0, OPENING_LINES.length - 1) && isBool(op.done)))) errors.push("오프닝 정보가 올바르지 않습니다.");
+  // 영업 중단 (버전 9): 중단된 뒤에는 돈이 바뀌지 않으므로 저장된 소지금과 같아야 한다
+  const go = data.gameOver;
+  if (go !== null) {
+    if (!isObject(go) || !isInt(go.dayNumber, 1) || !isInt(go.money, MONEY_MIN, GAME_OVER_MONEY) || !isStr(go.orderId) ||
+      go.money !== data.money || !isObject(data.day) || (data.day as Obj).dayNumber !== go.dayNumber) {
+      errors.push("영업 중단 정보가 올바르지 않습니다.");
+    }
+  }
+  // 복구 지점 (버전 9): 영업 시작 상태 최대 2개(전날·오늘), 각각 완전한 게임 상태여야 한다
+  const cps = data.checkpoints;
+  if (!Array.isArray(cps) || cps.length > 2) errors.push("복구 지점 목록이 올바르지 않습니다.");
+  else {
+    let prev = 0;
+    cps.forEach((c, i) => {
+      const w = `복구 지점 ${i + 1}`;
+      if (!isObject(c) || !isInt(c.dayNumber, 1) || !isObject(c.state) || c.dayNumber <= prev) { errors.push(`${w}: 형식이 올바르지 않습니다.`); return; }
+      prev = c.dayNumber as number;
+      const st = c.state as Obj;
+      if ("checkpoints" in st || "gameOver" in st || "opening" in st) { errors.push(`${w}: 형식이 올바르지 않습니다.`); return; }
+      const r = validateState({ ...st, opening: null, checkpoints: [], gameOver: null });
+      if (!r.ok) errors.push(`${w}(${c.dayNumber}일차 시작): ${r.errors[0]}`);
+      else if (!isObject(st.day) || st.day.dayNumber !== c.dayNumber || st.day.status !== "open" || st.day.currentIndex !== 0) errors.push(`${w}: 영업 시작 상태가 아닙니다.`);
+    });
+    if (isObject(data.day) && cps.some((c) => isObject(c) && isInt(c.dayNumber) && (c.dayNumber as number) > ((data.day as Obj).dayNumber as number))) {
+      errors.push("복구 지점이 지금 일차보다 뒤입니다.");
     }
   }
   if (errors.length) return { ok: false, errors };
@@ -507,7 +547,7 @@ function convertV2Order(o: V2.Order): Order {
  * - 유형 소개 단계: 0(①②)에서 시작 → 다음 영업부터 ③④ … 순서대로 소개 (일차가 높아도 건너뛰지 않음)
  */
 /** 버전 3 모양 (해금 목록이 없음) */
-export type V3GameState = Omit<GameState, "saveVersion" | "unlockedIngredients" | "recipeNotices" | "featuredRecipes" | "shop" | "tutorial"> & { saveVersion: 3 };
+export type V3GameState = Omit<GameState, "saveVersion" | "unlockedIngredients" | "recipeNotices" | "featuredRecipes" | "shop" | "tutorial" | "opening" | "checkpoints" | "gameOver"> & { saveVersion: 3 };
 
 export function migrateV2toV3(v2: V2.GameState): V3GameState {
   let day: DayState | null = null;
@@ -606,6 +646,37 @@ export function migrateV7toV8(v7: Obj): Obj {
 }
 
 /**
+ * 버전 8 → 9 (피해 보상금·영업 중단·복구 지점·오프닝 버전)
+ * - 모든 진행(돈·일차·주문·계량·젓기·지급·학습 기록·해금·상점·튜토리얼): 그대로
+ * - 이미 전달(지급)한 주문: 그때 받은 판매금 그대로 — 다시 계산하지 않는다 (penalty 없음 = 이전 규칙 정산)
+ * - 병에 담았지만 아직 전달하지 않은 주문: 돈이 움직이기 전이므로 새 규칙(정상 판매금 / 판매금 0 + 보상금)으로 다시 정한다
+ * - 새 항목: opening null(이어하던 게임에 오프닝을 보여 주지 않음), gameOver null, checkpoints [] (없는 복구 지점을 지어내지 않음)
+ */
+export function migrateV8toV9(v8: Obj): Obj {
+  let day = v8.day;
+  if (isObject(day) && Array.isArray(day.orders)) {
+    const orders = (day.orders as unknown[]).map((o) => {
+      if (!isObject(o) || o.status !== "bottled" || !Array.isArray(o.tasks) || !o.tasks.every(isObject)) return o;
+      const order = o as unknown as Order;
+      const q = qualityOf(order);
+      return { ...o, quality: q, ...settleOrder(order, q) };
+    });
+    day = { ...day, orders };
+  }
+  return { ...v8, saveVersion: 9, day, opening: null, checkpoints: [], gameOver: null };
+}
+
+/**
+ * 업데이트 전 저장을 옮길 때: 오늘 영업을 막 시작해 첫 손님 주문을 받기 전(판매 0)이면, 그 상태가 곧 오늘의 영업 시작 상태이므로
+ * 복구 지점으로 둔다. 이미 영업이 진행된 저장은 시작 상태를 알 수 없으므로 복구 지점을 만들지 않는다(다음 영업부터 생김).
+ */
+export function migrationCheckpoint(state: GameState): GameState {
+  const d = state.day;
+  if (!d || state.checkpoints.length || d.status !== "open" || d.currentIndex !== 0 || d.moneyEarned !== 0 || d.orders[0].status !== "arrived") return state;
+  return { ...state, checkpoints: [{ dayNumber: d.dayNumber, state: { ...snapshotOf(state), scene: "counter", ...{ activeTask: null, draftAnswer: "", feedback: null, pour: null } } }] };
+}
+
+/**
  * 불러온(검사를 통과한) 상태 정리 — 몇 번 해도 결과가 같다.
  * 1) 문제은행 주문의 대사·재설명·주문서 메모를 개선된 문항 문구로: 문항 ID가 있고, 저장된 지정 재료·인수가 그 문항과
  *    똑같을 때만 바꾼다(인사·기다림·반응 말과 주문 수치·진행·보상은 그대로). 조건이 다른 주문은 새 문항으로 바꾸지 않는다.
@@ -651,26 +722,30 @@ function interpretRaw(data: unknown, seed: number): InterpretResult {
     const r = validateState(data);
     return r.ok ? { ok: true, state: r.state, migratedFrom: null } : { ok: false, kind: "invalid", errors: r.errors };
   }
+  if (v === 8) {
+    const r = validateState(migrateV8toV9(data));
+    return r.ok ? { ok: true, state: r.state, migratedFrom: 8 } : { ok: false, kind: "invalid", errors: r.errors };
+  }
   if (v === 7) {
-    const r = validateState(migrateV7toV8(data));
+    const r = validateState(migrateV8toV9(migrateV7toV8(data)));
     return r.ok ? { ok: true, state: r.state, migratedFrom: 7 } : { ok: false, kind: "invalid", errors: r.errors };
   }
   if (v === 6) {
-    const r = validateState(migrateV7toV8(migrateV6toV7(data)));
+    const r = validateState(migrateV8toV9(migrateV7toV8(migrateV6toV7(data))));
     return r.ok ? { ok: true, state: r.state, migratedFrom: 6 } : { ok: false, kind: "invalid", errors: r.errors };
   }
   if (v === 5) {
     // 진행 상태(화면 포함)를 그대로 이어 간다
-    const r = validateState(migrateV7toV8(migrateV6toV7(migrateV5toV6(data))));
+    const r = validateState(migrateV8toV9(migrateV7toV8(migrateV6toV7(migrateV5toV6(data)))));
     return r.ok ? { ok: true, state: r.state, migratedFrom: 5 } : { ok: false, kind: "invalid", errors: r.errors };
   }
   if (v === 4) {
-    const r = validateState(migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(data)))));
+    const r = validateState(migrateV8toV9(migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(data))))));
     return r.ok ? { ok: true, state: r.state, migratedFrom: 4 } : { ok: false, kind: "invalid", errors: r.errors };
   }
   if (v === 3) {
     // 옮긴 사실을 처음 화면에서 알려 주도록 타이틀에서 시작 (이어하기를 누르면 그 화면으로 돌아간다: 제조 진행은 그대로)
-    const r = validateState({ ...migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(data))))), scene: "title" });
+    const r = validateState({ ...migrateV8toV9(migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4(data)))))), scene: "title" });
     return r.ok ? { ok: true, state: r.state, migratedFrom: 3 } : { ok: false, kind: "invalid", errors: r.errors };
   }
   if (v === 1 || v === 2) {
@@ -684,7 +759,7 @@ function interpretRaw(data: unknown, seed: number): InterpretResult {
       if (!r2.ok) return { ok: false, kind: "invalid", errors: r2.errors };
       v2 = r2.state;
     }
-    const migrated = migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4({ ...migrateV2toV3(v2), scene: "title" as const } as unknown as Obj)))));
+    const migrated = migrateV8toV9(migrateV7toV8(migrateV6toV7(migrateV5toV6(migrateV4toV5(migrateV3toV4({ ...migrateV2toV3(v2), scene: "title" as const } as unknown as Obj))))));
     const r3 = validateState(migrated);
     if (!r3.ok) return { ok: false, kind: "invalid", errors: [`Phase ${v} 저장을 옮기는 중 문제가 생겼습니다.`, ...r3.errors] };
     return { ok: true, state: r3.state, migratedFrom: v };
@@ -698,8 +773,9 @@ function interpretRaw(data: unknown, seed: number): InterpretResult {
 /** 저장 데이터 해석 + 정리(normalizeLoaded). 불러오기·가져오기가 함께 쓴다 */
 export function interpretSaveData(data: unknown, seed: number): InterpretResult {
   const r = interpretRaw(data, seed);
-  return r.ok ? { ...r, state: normalizeLoaded(r.state) } : r;
-
+  if (!r.ok) return r;
+  const state = normalizeLoaded(r.state);
+  return { ...r, state: r.migratedFrom !== null ? migrationCheckpoint(state) : state };
 }
 
 export type LoadResult =

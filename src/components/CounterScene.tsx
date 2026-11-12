@@ -53,7 +53,10 @@ export function CounterScene({
   onCloseDay,
   equipped,
   hud,
+  halted = false,
 }: {
+  /** 영업 중단(게임 오버): 다음 손님·마감 버튼을 내지 않는다 */
+  halted?: boolean;
   equipped: ShopState["equipped"];
   /** 장면 안쪽 가장자리에 놓는 작은 상태 UI(처음 화면·일차·소리·소지금·상점) */
   hud?: HudProps;
@@ -247,7 +250,20 @@ export function CounterScene({
           {order.status === "paid" && (
             <>
               <p className="paid-text" data-testid="paid-text">
-                {order.quality ? (
+                {order.penalty !== undefined && order.quality ? (
+                  order.penalty > 0 ? (
+                    <>
+                      <span className={`quality q-${order.quality}`} data-testid="quality">{QUALITY_LABEL[order.quality]}</span>{" "}
+                      잘못 만든 포션이라 판매금은 <strong data-testid="reward">{order.reward}</strong>G.{" "}
+                      <strong className="penalty-text" data-testid="penalty">보상금 −{order.penalty}G</strong>를 손님에게 드렸어요.
+                    </>
+                  ) : (
+                    <>
+                      <span className={`quality q-${order.quality}`} data-testid="quality">{QUALITY_LABEL[order.quality]}</span>{" "}
+                      정상 판매금 달빛 동전 <strong data-testid="reward">{order.reward}</strong>개를 받았어요.
+                    </>
+                  )
+                ) : order.quality ? (
                   <>
                     <span className={`quality q-${order.quality}`} data-testid="quality">{QUALITY_LABEL[order.quality]}</span>{" "}
                     정상 판매금 {order.price}의 {percentFor(order.tasks.length, order.quality)}% → 달빛 동전 <strong data-testid="reward">{order.reward}</strong>개를 받았어요.
@@ -255,9 +271,11 @@ export function CounterScene({
                 ) : (
                   <>판매 완료! 달빛 동전 <strong data-testid="reward">{order.reward}</strong>개를 받았어요.</>
                 )}
-                {last && " 오늘의 마지막 손님이었어요."}
+                {last && !halted && " 오늘의 마지막 손님이었어요."}
               </p>
-              {last ? (
+              {halted ? (
+                <p className="halted-text" data-testid="halted">영업을 이어 갈 수 없어요.</p>
+              ) : last ? (
                 <button type="button" className="btn btn-gold btn-big" disabled={locked} onClick={onCloseDay} data-testid="close-day" data-sfx="shutterClose">
                   <Icon name="moon" /> 영업 마감
                 </button>
@@ -275,9 +293,15 @@ export function CounterScene({
       {hud && <SceneHud box={hudPos.box} {...hud} homeDisabled={hud.homeDisabled} shopDisabled={hud.shopDisabled || opening || arriving} />}
 
       {celebrating && order.status === "paid" && (
-        <div className="coin-pop" data-testid="coin-pop" aria-hidden="true">
-          +{order.reward} <Icon name="coin" size={30} />
-        </div>
+        (order.penalty ?? 0) > 0 ? (
+          <div className="coin-pop coin-pop--minus" data-testid="coin-pop" aria-hidden="true">
+            보상금 −{order.penalty}G
+          </div>
+        ) : (
+          <div className="coin-pop" data-testid="coin-pop" aria-hidden="true">
+            +{order.reward} <Icon name="coin" size={30} />
+          </div>
+        )
       )}
 
       {introOpen && !opening && (

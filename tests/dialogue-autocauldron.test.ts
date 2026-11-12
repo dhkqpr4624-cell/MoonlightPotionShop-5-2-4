@@ -235,7 +235,8 @@ test("자동 가마솥: 계량 문제·오답 해설·품질 감점은 그대로
   assert.equal(o.tasks[1].correct, false);
   assert.equal(o.quality, qualityOf(o));
   assert.equal(o.quality, "good");
-  assert.equal(o.reward, rewardForOrder(o, "good"));
+  assert.equal(o.reward, 0, "잘못 만든 포션: 판매금 0");
+  assert.equal(o.penalty, Math.round(o.price / 3), "보상금은 수동 제조와 같다");
   assert.ok(s.review.some((c) => c.sourceProblemId === o.tasks[1].problemId), "오답 복습 후보도 그대로");
 });
 
@@ -311,7 +312,7 @@ function loadFixture(name: string) {
 
 test("v7 저장(직전 버전 코드로 만든 젓는 중, 자동 가마솥 보유·꺼둠) → v8: 바로 병에 담긴 상태, 돈·진행·오답 그대로, 대사는 같은 문항일 때만 새 문구", () => {
   const { v7, s } = loadFixture("v7-autocauldron-midstir.json");
-  assert.equal(s.saveVersion, 8);
+  assert.equal(s.saveVersion, 9);
   assert.equal(v7.shop.toggles.autoCauldron, false);
   assert.equal(s.shop.toggles.autoCauldron, true);
   assert.equal(s.money, v7.money, "불러올 때는 돈을 주지 않는다");
@@ -333,7 +334,8 @@ test("v7 저장(직전 버전 코드로 만든 젓는 중, 자동 가마솥 보�
   }
   // 불러온 뒤 전달 → 한 번 지급, 다시 불러와도 그대로
   let t = run(s, { type: "GO_COUNTER" }, { type: "DELIVER", orderId: o.id, now: NOW });
-  assert.equal(t.money, v7.money + o.reward!);
+  assert.equal(o.reward, 0, "오답이 있는 주문: 판매금 0");
+  assert.equal(t.money, v7.money - o.penalty!, "보상금은 전달할 때 한 번");
   const store = memoryStorage();
   saveGame(t, store);
   const again = loadGame(1, store);

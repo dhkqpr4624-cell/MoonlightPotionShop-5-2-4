@@ -99,6 +99,8 @@ export function useSceneLayout(box: RefObject<HTMLElement | null>, content?: Ref
 export function standX(layout: SceneLayout): number {
   return SC.width / 2 + (layout.narrow ? 0 : SC.standX);
 }
+/** 대기 중 움직임(styles.css npc-breathe: 위로 4px + 1.008배)으로 귀 끝이 올라가는 최대 높이(캔버스 px)만큼 미리 남기는 여유 */
+export const NPC_MOTION_HEADROOM = 14;
 /** 아치 위쪽 곡선과 겹치지 않도록 귀 끝이 내려와 있어야 하는 캔버스 y */
 const ARCH_SAFE_TOP = 60;
 
@@ -109,7 +111,7 @@ const ARCH_SAFE_TOP = 60;
  */
 export function npcScale(app: Appearance, layout: SceneLayout, reserveTop = 0): number {
   const base = app.display.scale * (layout.narrow ? 0.84 : 1);
-  const visibleTop = Math.max(ARCH_SAFE_TOP, (-layout.sceneTop + reserveTop + 10) / layout.s);
+  const visibleTop = Math.max(ARCH_SAFE_TOP, (-layout.sceneTop + reserveTop + 10) / layout.s) + NPC_MOTION_HEADROOM;
   const fit = (COUNTER_SCENE_TABLE - visibleTop) / (app.display.cutY - app.display.top);
   return Math.max(0.2, Math.min(base, fit));
 }

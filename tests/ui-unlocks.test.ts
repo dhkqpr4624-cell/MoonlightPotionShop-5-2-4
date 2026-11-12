@@ -163,8 +163,8 @@ test("다음 영업부터 바람 걸음 포션 주문(최소 1건), 하나만 �
   }
 });
 
-test("바람 걸음 포션 제조: 두 재료를 모두 넣어야 젓기·완성, 순서는 자유, 품질 100·80·60%", () => {
-  for (const [wrong, quality, pct] of [[[], "great", 100], [[1], "okay", 80], [[0], "okay", 80], [[0, 1], "poor", 60]] as const) {
+test("바람 걸음 포션 제조: 두 재료를 모두 넣어야 젓기·완성, 순서는 자유, 오답이면 판매금 0·보상금 18 ÷ 3 = 6 (틀린 재료 수와 무관)", () => {
+  for (const [wrong, quality] of [[[], "great"], [[1], "okay"], [[0], "okay"], [[0, 1], "poor"]] as const) {
     let s = windBrewing();
     const o = order(s);
     assert.equal(o.price, 18, "3병 × 6");
@@ -181,8 +181,8 @@ test("바람 걸음 포션 제조: 두 재료를 모두 넣어야 젓기·완성
     for (let k = 0; k < 4; k++) s = reducer(s, { type: "STIR", orderId: o.id, amount: 25 });
     s = run(s, { type: "COMPLETE_POTION", orderId: o.id }, { type: "GO_COUNTER" }, { type: "DELIVER", orderId: o.id, now: NOW });
     assert.equal(order(s).quality, quality);
-    assert.equal(order(s).reward, Math.floor((18 * pct) / 100));
-    assert.equal(s.money, Math.floor((18 * pct) / 100));
+    assert.equal(order(s).reward, quality === "great" ? 18 : 0);
+    assert.equal(s.money, quality === "great" ? 18 : -6);
     const again = run(s, { type: "DELIVER", orderId: o.id, now: NOW });
     assert.equal(again.money, s.money, "중복 지급 없음");
   }
@@ -303,7 +303,7 @@ test("잘못 만든 포션: 여러 병 주문은 병 수 그대로, 1병 주문�
 test("저장 v5: 새 항목 검사 (안내·첫 주문 목록은 해금된 레시피만)", () => {
   const s = run({ ...createInitialState(), money: 300 }, { type: "START", seed: 5 },
     { type: "UNLOCK_INGREDIENT", ingredientId: "featherGrass" }, { type: "UNLOCK_INGREDIENT", ingredientId: "windShard" });
-  assert.equal(s.saveVersion, 8);
+  assert.equal(s.saveVersion, 9);
   const ok = validateState(roundTrip(s));
   assert.ok(ok.ok);
   if (ok.ok) assert.deepEqual(ok.state, s);
@@ -330,7 +330,7 @@ test("v4 저장(실제 직전 버전 코드로 만든 계량 중·젓는 중) �
     const s = l.state;
     assert.equal(l.migratedFrom, 4);
     assert.equal(store.mem.get("moonlight-potion-shop/backup-v4"), raw, "원본 백업");
-    assert.equal(s.saveVersion, 8);
+    assert.equal(s.saveVersion, 9);
     assert.equal(s.scene, v4.scene, "화면 그대로 이어감");
     assert.equal(s.money, v4.money, "돈을 보충하지 않음");
     assert.deepEqual(s.unlockedIngredients, ["energyHerb"], "새 재료는 잠김, 구매 내역 지어내지 않음");
@@ -373,19 +373,20 @@ test("가져오기: v4 내보내기 파일·v5 파일은 받아들이고, 잘못
   assert.equal(parseImportText(JSON.stringify(bad), 1).ok, false, "해금 안 된 레시피 안내는 거부");
   const bad2 = JSON.parse(text);
   bad2.game.unlockedIngredients = ["energyHerb", "featherGrass", "windShard"];
-  bad2.game.money = -1;
+  bad2.game.money = 1.5;
   assert.equal(parseImportText(JSON.stringify(bad2), 1).ok, false);
   assert.equal(interpretSaveData({ saveVersion: 6 }, 1).ok, false, "더 새로운 버전 거부");
 });
 
-test("한 재료(기력 포션) 주문은 그대로: 정답 100%, 오답 60%, 하루 5문제", () => {
-  let s = run(createInitialState(), { type: "START", seed: 44 });
+test("한 재료(기력 포션) 주문: 정답 정상가, 오답 판매금 0·보상금, 하루 5문제", () => {
+  let s = run({ ...createInitialState(), money: 200 }, { type: "START", seed: 44 });
   s = playFullDay(s, (i) => (i % 2 ? { wrong: [0] } : {}));
   const sum = summarizeDay(s.day!, s.money, NOW);
   assert.equal(sum.totalProblems, 5);
   for (const o of s.day!.orders) {
     assert.equal(o.tasks.length, 1);
-    assert.equal(o.reward, Math.floor((o.price * (o.tasks[0].correct ? 100 : 60)) / 100));
+    assert.equal(o.reward, o.tasks[0].correct ? o.price : 0);
+    assert.equal(o.penalty, o.tasks[0].correct ? 0 : Math.round(o.price / 3));
   }
   assert.equal(getIngredient("energyHerb").unlockCost, 0);
 });

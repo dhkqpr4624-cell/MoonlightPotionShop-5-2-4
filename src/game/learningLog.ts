@@ -138,6 +138,7 @@ export function typeStats(state: GameState): TypeStat[] {
 export function orderRows(state: GameState) {
   return state.orderLog.map((o) => ({
     ...o,
+    penalty: o.penalty ?? 0,
     kindLabel: KIND_LABEL[o.kind],
     qualityLabel: o.quality ? QUALITY_LABEL[o.quality] : "이전 규칙(정액)",
   }));

@@ -7,13 +7,14 @@
  *  - 정답 여부: 재료 과제마다 정답 확률 p (모두 정답 1.0 / 섞임 0.75 / 오답 많음 0.35)
  *  - 구매: 영업을 마칠 때마다 '필요한 미보유 재료가 가장 적은 잠긴 레시피'의 가장 싼 미보유 재료부터,
  *    돈이 되는 만큼 산다(게임의 레시피북 '다음 목표'와 같은 순서). 장식·편의품은 사지 않는다.
+ *  - 수입은 저장 버전 9 정산(판매금 − 피해 보상금)으로 센다. 하루 수입이 음수일 수 있다.
  *  - 새로 열린 레시피는 다음 영업부터 주문 후보 + 첫 주문 1건(게임과 같음). 복습 주문은 생략.
  */
 import { INGREDIENTS } from "../src/data/ingredients.ts";
 import { RECIPES } from "../src/data/recipes.ts";
 import { INTRO_STAGES, MAX_INTRO_STAGE } from "../src/data/learningTypes.ts";
 import { planDay } from "../src/game/orderFactory.ts";
-import { qualityOf, rewardForOrder } from "../src/game/outcome.ts";
+import { qualityOf, settleOrder } from "../src/game/outcome.ts";
 import { availableRecipes, newlyAvailableRecipes, nextGoal } from "../src/game/unlocks.ts";
 import { createRng } from "../src/lib/rng.ts";
 import { priceOf } from "../src/data/shop.ts";
@@ -56,7 +57,9 @@ export function simulate(p: number, seed: number, days = 45, shopFirst: string[]
     let earned = 0;
     for (const o of r.orders) {
       const done = { ...o, tasks: o.tasks.map((t) => ({ ...t, correct: rng() < p })) };
-      earned += rewardForOrder(done, qualityOf(done));
+      // 저장 버전 9 정산: 정확하면 판매금, 하나라도 틀리면 판매금 0 − 보상금(정상가 ÷ 3)
+      const st = settleOrder(done, qualityOf(done));
+      earned += st.reward - st.penalty;
     }
     money += earned;
     income.push(earned);
